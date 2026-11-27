@@ -54,6 +54,7 @@ Branch: `main` · remote: none
 
 ### Last 15 commits
 
+- `0b80a57` 2026-11-27 21:14 feat(engine): content stream tokenizer and page helpers
 - `dacf1be` 2026-11-27 21:14 feat(engine): contract, context and geometry helpers
 - `a7cf22a` 2026-11-27 21:13 docs: readme, module brief and handoff automation
 - `239e715` 2026-11-27 21:13 chore: project setup, tooling and AGPL licence
@@ -61,16 +62,15 @@ Branch: `main` · remote: none
 ### Uncommitted changes at refresh time
 
 ```
-A  src/engine/content/page.ts
-A  src/engine/content/tokenizer.ts
+A  src/engine/client.ts
+A  src/engine/engine.ts
+A  src/engine/fonts/index.ts
+A  src/engine/fonts/types.ts
+A  src/engine/ocr/index.ts
+A  src/engine/ops/index.ts
+A  src/engine/text/index.ts
+A  src/engine/worker.ts
 ?? src/App.tsx
-?? src/engine/client.ts
-?? src/engine/engine.ts
-?? src/engine/fonts/
-?? src/engine/ocr/
-?? src/engine/ops/
-?? src/engine/text/
-?? src/engine/worker.ts
 ?? src/main.tsx
 ?? src/ocr/
 ?? src/store/
