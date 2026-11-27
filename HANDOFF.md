@@ -55,6 +55,7 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `02ee33c` 2026-11-27 21:50 feat(ops): added objects, images, forms, page tools, redaction and export
 - `9c783bf` 2026-11-27 21:49 fix(engine): drop MuPDF's font cache after every mutation, undo and redo
 - `fda0c3d` 2026-11-27 21:49 feat(fonts): font catalog, HarfBuzz shaping and embedding for all scripts
 - `2613fab` 2026-11-27 21:14 feat(app): shared store, design tokens and entry point
@@ -69,42 +70,12 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 ```
 M index.html
  M src/App.tsx
-M  src/engine/engine.ts
  M src/engine/ocr/index.ts
-A  src/engine/ops/annots.ts
-A  src/engine/ops/clone.ts
-A  src/engine/ops/export.ts
-A  src/engine/ops/forms.ts
-A  src/engine/ops/imageData.ts
-A  src/engine/ops/images.ts
-M  src/engine/ops/index.ts
-A  src/engine/ops/insert.ts
-A  src/engine/ops/objects.ts
-A  src/engine/ops/pages.ts
-A  src/engine/ops/readingOrder.ts
-A  src/engine/ops/redact.ts
-A  src/engine/ops/redactContent.ts
-A  src/engine/ops/shared.ts
-A  src/engine/ops/stamps.ts
-A  src/engine/ops/state.ts
-A  src/engine/ops/textLayout.ts
-A  src/engine/ops/walk.ts
  M src/engine/text/index.ts
  M src/ocr/index.ts
- M src/store/index.ts
+M  src/store/index.ts
  M src/ui/tokens.css
  M src/ui/viewer/Viewer.tsx
-A  tests/ops/export.test.ts
-A  tests/ops/fakeFonts.ts
-A  tests/ops/fakeModules.ts
-A  tests/ops/formFixture.ts
-A  tests/ops/forms.test.ts
-A  tests/ops/helpers.ts
-A  tests/ops/images.test.ts
-A  tests/ops/integration.test.ts
-A  tests/ops/objects.test.ts
-A  tests/ops/pages.test.ts
-A  tests/ops/redact.test.ts
 ?? playwright.config.ts
 ?? public/icon.svg
 ?? public/icons/

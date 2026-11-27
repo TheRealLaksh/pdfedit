@@ -125,6 +125,7 @@ function writeStored(key: string, value: unknown) {
 }
 
 let toastId = 1;
+let runningCalls = 0;
 let ocrAbort: AbortController | null = null;
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const isPdf = (f: File) => f.type === "application/pdf" || /\.pdf$/i.test(f.name);
@@ -257,6 +258,7 @@ export const useStore = create<AppState>()((set, get) => {
 
     async run(label, call) {
       set({ busy: label });
+      runningCalls++;
       try {
         const result = await call();
         get().applyMutation(result);
@@ -265,7 +267,8 @@ export const useStore = create<AppState>()((set, get) => {
         get().toast(errorText(e), "error");
         return null;
       } finally {
-        set({ busy: null });
+        // calls can overlap: stay busy until the last one finishes
+        if (--runningCalls === 0) set({ busy: null });
       }
     },
 
