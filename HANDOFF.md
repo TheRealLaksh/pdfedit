@@ -71,6 +71,7 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `41fa302` 2026-11-27 23:28 fix(shell): desktop and back-navigation fixes, restriction and XFA notices
 - `352af7f` 2026-11-27 23:28 fix(ocr): better mixed-language detection and pinned recognition data
 - `31c2352` 2026-11-27 23:28 fix(ops): guard hostile documents and keep list box highlights
 - `72182c2` 2026-11-27 23:28 fix(engine): cap content parser nesting
@@ -85,13 +86,11 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `126fec4` 2026-11-27 22:22 fix(ops): keep stroke state on redaction, order rotated text, quiet export after undo
 - `e74c459` 2026-11-27 22:19 fix(engine): leave internal font names out of the substitution notice
 - `83b812e` 2026-11-27 22:18 test: integration and browser test suites
-- `07b5c8a` 2026-11-27 22:18 test: multi-language PDF corpus and Playwright config
 
 ### Uncommitted changes at refresh time
 
 ```
-M  src/App.tsx
- M src/engine/fonts/draw.ts
+M src/engine/fonts/draw.ts
  M src/engine/fonts/index.ts
  M src/engine/fonts/inspect.ts
  M src/engine/fonts/layout.ts
@@ -103,22 +102,15 @@ M  src/App.tsx
  M src/engine/text/layout.ts
  M src/engine/text/pdffont.ts
  M src/engine/text/rewrite.ts
-M  src/store/index.ts
-M  src/ui/shell/Feedback.tsx
-M  src/ui/shell/actions.ts
-A  src/ui/shell/backGuard.ts
-M  src/ui/shell/panels/AboutPanel.tsx
-M  src/ui/shell/panels/PagesPanel.tsx
-M  src/ui/shell/shell.css
  M src/ui/viewer/Viewer.tsx
  M src/ui/viewer/editor/controller.ts
  M src/ui/viewer/layers/EditTextLayer.tsx
  M src/ui/viewer/layers/PlaceLayer.tsx
  M src/ui/viewer/layers/SelectLayer.tsx
  M src/ui/viewer/pageData.ts
+A  tests/e2e/back.spec.ts
+A  tests/e2e/desktop.spec.ts
  M tests/text/mockFonts.ts
-?? tests/e2e/back.spec.ts
-?? tests/e2e/desktop.spec.ts
 ?? tests/text/fidelity.test.ts
 ```
 <!-- handoff:auto:end -->
