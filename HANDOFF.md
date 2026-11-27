@@ -52,12 +52,13 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 <!-- handoff:auto:start -->
 ## Auto: repo state
 
-_Refreshed 27 Nov 2026, 9:51 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
+_Refreshed 27 Nov 2026, 10:06 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
 
 Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `c562164` 2026-11-27 21:51 docs: handoff status for operations and shell
 - `08908b8` 2026-11-27 21:50 feat(shell): start screen, editor chrome, panels and dialogs
 - `942591c` 2026-11-27 21:50 feat(shell): design tokens, app icons and PWA assets
 - `8e1236b` 2026-11-27 21:50 fix(store): stay busy until overlapping calls all finish
@@ -74,7 +75,7 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 ### Uncommitted changes at refresh time
 
 ```
-M  HANDOFF.md
+M  src/engine/client.ts
  M src/engine/ocr/index.ts
  M src/engine/text/index.ts
  M src/ocr/index.ts
