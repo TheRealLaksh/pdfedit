@@ -65,16 +65,16 @@ export interface TextSpan {
 export type Align = "left" | "center" | "right" | "justify";
 
 export interface TextLine {
-  /** stable only for the page revision it came from. OCR lines start with "ocr:" */
+  /** stable only for the page revision it came from. OCR lines start with "ocr:"; hidden text layer ids end ".h" */
   id: string;
   page: number;
   /** logical (reading) order Unicode */
   text: string;
   quad: Quad;
   rect: Rect;
-  /** baseline start, page space */
+  /** LEFT end of the baseline (also for right-to-left text), page space */
   origin: Point;
-  /** baseline direction, radians, page space (0 = left to right, y down) */
+  /** direction of the left-to-right baseline axis, radians, page space (y down), also for right-to-left text */
   angle: number;
   dir: "ltr" | "rtl";
   /** dominant style */
