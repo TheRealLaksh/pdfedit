@@ -264,7 +264,21 @@ export function PagesPanel() {
       </div>
 
       <div className="sh-scroll">
-        <ol className="sh-thumbs" ref={grid}>
+        <ol
+          className="sh-thumbs"
+          ref={grid}
+          onKeyDown={(e) => {
+            const mod = e.ctrlKey || e.metaKey;
+            if (mod && e.key.toLowerCase() === "a") {
+              e.preventDefault();
+              setPicked(range(count));
+            } else if (!mod && (e.key === "Delete" || e.key === "Backspace")) {
+              // the viewer must not also delete whatever is selected on the page
+              e.preventDefault();
+              if (!busy && selected.length && selected.length < count) void remove();
+            }
+          }}
+        >
           {range(count).map((page) => (
             <li
               key={page}

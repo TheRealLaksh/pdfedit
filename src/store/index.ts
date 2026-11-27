@@ -127,6 +127,12 @@ function writeStored(key: string, value: unknown) {
 let toastId = 1;
 let runningCalls = 0;
 let ocrAbort: AbortController | null = null;
+/** files chosen together with a protected PDF, waiting for its password */
+let waitingFiles: { before: File[]; after: File[] } | null = null;
+/** pages whose "has recognised text" state must be read again (undo and page moves change it) */
+const staleOcrPages = new Set<number>();
+let ocrUsed = false;
+let checkingOcr = false;
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const isPdf = (f: File) => f.type === "application/pdf" || /\.pdf$/i.test(f.name);
 const isImage = (f: File) => f.type.startsWith("image/") || /\.(png|jpe?g|gif|bmp|tiff?|webp)$/i.test(f.name);
@@ -175,6 +181,10 @@ export const useStore = create<AppState>()((set, get) => {
       set({ passwordPrompt: { bytes, fileName, wrong: result.wrong }, busy: null });
       return;
     }
+    // recognition of the previous document is over
+    ocrAbort?.abort();
+    ocrUsed = false;
+    staleOcrPages.clear();
     set((s) => ({
       ...fresh(),
       doc: result.doc,
@@ -184,6 +194,104 @@ export const useStore = create<AppState>()((set, get) => {
     if (result.doc.signed)
       get().toast("This PDF is digitally signed. Any change will invalidate the signature.", "warning");
     if (result.doc.repaired) get().toast("This file was damaged and has been repaired.", "info");
+    if (result.doc.restricted)
+      get().toast(
+        "The author of this PDF restricted editing. The downloaded copy will not carry that restriction, so only edit it if you are allowed to.",
+        "warning",
+      );
+    if (result.doc.xfa)
+      get().toast("This PDF uses an XFA form. Some fields only appear in Adobe's software.", "warning");
+  };
+
+  /** take over an engine result: document state, undo state and notices */
+  const apply = (result: MutationResult) => {
+    set((s) => ({
+      doc: result.doc,
+      dirty: result.canUndo,
+      canUndo: result.canUndo,
+      canRedo: result.canRedo,
+      currentPage: Math.min(s.currentPage, result.doc.pageCount - 1),
+      search: result.changedPages.length ? { ...s.search, matches: [], active: -1 } : s.search,
+      // an older "Undo" offer would now take back this change instead of the one it names
+      toasts: s.toasts.filter((t) => t.action?.label !== "Undo"),
+    }));
+    for (const w of result.warnings) get().toast(w, "warning");
+    const fonts = result.fallbackFonts;
+    if (fonts.length)
+      get().toast(
+        `The original font could not draw some characters, so ${fonts.join(", ")} ${fonts.length > 1 ? "were" : "was"} used.`,
+        "info",
+        { label: "Upload font", run: () => get().openPanel("fonts") },
+      );
+  };
+
+  const refreshOcrDone = async (changed: number[]) => {
+    if (!ocrUsed) return;
+    const count = get().doc?.pageCount ?? 0;
+    if (get().ocr.done.some((p) => p >= count))
+      set((s) => ({ ocr: { ...s.ocr, done: s.ocr.done.filter((p) => p < count) } }));
+    for (const page of changed) staleOcrPages.add(page);
+    if (checkingOcr) return;
+    checkingOcr = true;
+    try {
+      for (const page of staleOcrPages) {
+        staleOcrPages.delete(page);
+        const session = get().session;
+        if (page >= (get().doc?.pageCount ?? 0)) continue;
+        const text = await engine.getPageText(page);
+        // changed again meanwhile: it is back in the set and will be read again
+        if (get().session !== session || staleOcrPages.has(page)) continue;
+        const has = text.lines.some((line) => line.id.startsWith("ocr:"));
+        if (has !== get().ocr.done.includes(page))
+          set((s) => ({
+            ocr: {
+              ...s.ocr,
+              done: has ? [...s.ocr.done, page].sort((a, b) => a - b) : s.ocr.done.filter((p) => p !== page),
+            },
+          }));
+      }
+    } catch {
+      /* the document went away */
+    } finally {
+      checkingOcr = false;
+    }
+  };
+
+  /** resolves once no other engine change is on its way */
+  const settled = () =>
+    new Promise<void>((resolve) => {
+      if (!get().busy) return resolve();
+      const stop = useStore.subscribe((s) => {
+        if (s.busy) return;
+        stop();
+        resolve();
+      });
+    });
+
+  /** add the other files chosen with the opened PDF, keeping the order they were picked in */
+  const addFiles = async ({ before, after }: { before: File[]; after: File[] }) => {
+    let front = 0;
+    for (const [i, file] of [...before, ...after].entries()) {
+      const count = get().doc!.pageCount;
+      const at = i < before.length ? front : count;
+      try {
+        set({ busy: "Adding " + file.name });
+        if (isPdf(file)) get().applyMutation(await engine.insertPdf(new Uint8Array(await file.arrayBuffer()), at));
+        else get().applyMutation(await engine.insertImagesAsPages([await toEngineImage(file)], at));
+        if (i < before.length) front += get().doc!.pageCount - count;
+      } catch (e) {
+        get().toast(`${file.name} was not added: ${errorText(e)}`, "error");
+      } finally {
+        set({ busy: null });
+      }
+    }
+  };
+
+  /** run an open; true when it replaced the current document */
+  const replaced = async (open: () => Promise<void>) => {
+    const session = get().session;
+    await open();
+    return get().session !== session;
   };
 
   return {
@@ -206,19 +314,37 @@ export const useStore = create<AppState>()((set, get) => {
       const pdf = files.find(isPdf);
       try {
         if (pdf) {
-          await get().openBytes(new Uint8Array(await pdf.arrayBuffer()), pdf.name);
-          for (const extra of files.filter((f) => f !== pdf && isPdf(f))) {
-            const bytes = new Uint8Array(await extra.arrayBuffer());
-            await get().run("Adding " + extra.name, () => engine.insertPdf(bytes, get().doc!.pageCount));
-          }
+          const bytes = new Uint8Array(await pdf.arrayBuffer());
+          const split = files.indexOf(pdf);
+          const wanted = (f: File) => isPdf(f) || isImage(f);
+          const extras = { before: files.slice(0, split).filter(wanted), after: files.slice(split + 1).filter(wanted) };
+          waitingFiles = null;
+          if (await replaced(() => get().openBytes(bytes, pdf.name))) await addFiles(extras);
+          else if (get().passwordPrompt) waitingFiles = extras;
           return;
         }
         const images = files.filter(isImage);
         if (images.length) {
           set({ busy: "Turning images into a PDF" });
-          const data = await Promise.all(images.map(toEngineImage));
+          const data = await Promise.all(
+            images.map(async (file) => {
+              try {
+                // the engine drops the open document before it reads the pictures, so check them first
+                if (!/tiff?$/i.test(file.type || file.name)) (await createImageBitmap(file)).close();
+                return await toEngineImage(file);
+              } catch {
+                throw new Error(`${file.name} could not be read as an image.`);
+              }
+            }),
+          );
           const name = images[0]!.name.replace(/\.\w+$/, "") + ".pdf";
-          opened(await engine.createFromImages(data, name), new Uint8Array(), name);
+          try {
+            opened(await engine.createFromImages(data, name), new Uint8Array(), name);
+          } catch (e) {
+            // the engine no longer holds the old document: showing it would export an empty file
+            if (get().doc) await get().closeDoc();
+            throw e;
+          }
           return;
         }
         // unknown extension: let the engine decide
@@ -246,9 +372,17 @@ export const useStore = create<AppState>()((set, get) => {
       const p = get().passwordPrompt;
       if (!p) return;
       set({ passwordPrompt: null });
-      await get().openBytes(p.bytes, p.fileName, password);
+      const done = await replaced(() => get().openBytes(p.bytes, p.fileName, password));
+      if (done && waitingFiles) {
+        const extras = waitingFiles;
+        waitingFiles = null;
+        await addFiles(extras);
+      }
     },
-    cancelPassword: () => set({ passwordPrompt: null }),
+    cancelPassword: () => {
+      waitingFiles = null;
+      set({ passwordPrompt: null });
+    },
 
     async closeDoc() {
       ocrAbort?.abort();
@@ -273,21 +407,8 @@ export const useStore = create<AppState>()((set, get) => {
     },
 
     applyMutation(result) {
-      set((s) => ({
-        doc: result.doc,
-        dirty: result.canUndo,
-        canUndo: result.canUndo,
-        canRedo: result.canRedo,
-        currentPage: Math.min(s.currentPage, result.doc.pageCount - 1),
-        search: result.changedPages.length ? { ...s.search, matches: [], active: -1 } : s.search,
-      }));
-      for (const w of result.warnings) get().toast(w, "warning");
-      if (result.fallbackFonts.length)
-        get().toast(
-          `The original font could not draw some characters, so ${result.fallbackFonts.join(", ")} was used.`,
-          "info",
-          { label: "Upload font", run: () => get().openPanel("fonts") },
-        );
+      apply(result);
+      void refreshOcrDone(result.changedPages);
     },
 
     editLine: (page, edit) => get().run("Updating text", () => engine.editLines(page, [edit])),
@@ -319,10 +440,18 @@ export const useStore = create<AppState>()((set, get) => {
       const abort = (ocrAbort = new AbortController());
       const langs = languages ?? get().ocr.languages;
       const session = get().session;
+      // results belong to the page as it was when the run started: editing or moving it makes them wrong
+      const before = new Map(pages.map((p) => [p, get().doc?.pages[p]?.revision]));
+      const unchanged = (p: number) => get().doc?.pages[p]?.revision === before.get(p);
+      let skipped = 0;
       set((s) => ({ ocr: { ...s.ocr, running: true, progress: null } }));
       try {
         for (const page of pages) {
           if (abort.signal.aborted || get().session !== session) break;
+          if (!unchanged(page)) {
+            skipped++;
+            continue;
+          }
           set((s) => ({ ocr: { ...s.ocr, progress: { page, status: "Preparing page", progress: 0 } } }));
           const image = await engine.renderPage(page, OCR_SCALE);
           const result = await recognizePage(image, {
@@ -331,14 +460,27 @@ export const useStore = create<AppState>()((set, get) => {
             signal: abort.signal,
             onProgress: (progress) => set((s) => ({ ocr: { ...s.ocr, progress } })),
           });
+          await settled();
           if (abort.signal.aborted || get().session !== session) break;
-          get().applyMutation(await engine.setOcrResult(result));
+          if (!unchanged(page)) {
+            skipped++;
+            continue;
+          }
+          apply(await engine.setOcrResult(result));
+          ocrUsed = true;
           set((s) => ({ ocr: { ...s.ocr, done: [...new Set([...s.ocr.done, page])] } }));
         }
+        if (skipped && !abort.signal.aborted && get().session === session)
+          get().toast(
+            `${skipped === 1 ? "A page" : skipped + " pages"} changed while the text was being read and ${skipped === 1 ? "was" : "were"} skipped. Run recognition again.`,
+            "warning",
+            { label: "Recognise text", run: () => get().openPanel("ocr") },
+          );
       } catch (e) {
         if (!abort.signal.aborted) get().toast("Text recognition failed: " + errorText(e), "error");
       } finally {
-        set((s) => ({ ocr: { ...s.ocr, running: false, progress: null } }));
+        // a stopped run must not end the one started after it
+        if (ocrAbort === abort) set((s) => ({ ocr: { ...s.ocr, running: false, progress: null } }));
       }
     },
     cancelOcr() {
@@ -357,7 +499,8 @@ export const useStore = create<AppState>()((set, get) => {
       try {
         const bytes = await engine.exportPdf(options);
         saveBytes(bytes, doc.fileName.replace(/\.pdf$/i, "") + " (edited).pdf");
-        set({ dirty: false });
+        // a copy of only some pages does not save the whole document
+        if (!options?.pages) set({ dirty: false });
       } catch (e) {
         get().toast(errorText(e), "error");
       } finally {
@@ -371,7 +514,12 @@ export const useStore = create<AppState>()((set, get) => {
     startEditing: (page, lineId) => set({ editing: { page, lineId }, selection: null }),
     stopEditing: () => set({ editing: null }),
     openPanel: (panel) => set({ panel }),
-    setPlacement: (placement) => set({ placement }),
+    setPlacement: (placement) =>
+      set((s) => ({
+        placement,
+        // the image and signature tools do nothing without something to place
+        tool: !placement && s.placement && (s.tool === "image" || s.tool === "signature") ? "edit-text" : s.tool,
+      })),
     setZoom: (zoom) => set({ zoom: zoom === "fit" ? zoom : Math.min(8, Math.max(0.2, zoom)) }),
     setCurrentPage: (currentPage) => set({ currentPage }),
     scrollTo: (page, rect) => set({ scrollRequest: { page, rect, nonce: Math.random() }, currentPage: page }),

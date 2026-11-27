@@ -793,6 +793,22 @@ h1.sh-filename {
   flex: none;
   width: 28px;
 }
+/* laptop screens: all tools stay in view (mouse sized targets, the rail is desktop only) */
+@media (max-height: 740px) and (pointer: fine) {
+  .sh-rail {
+    gap: 0;
+    padding-block: var(--space-1);
+    scrollbar-width: thin;
+  }
+  .sh-rail .sh-iconbtn {
+    flex: none;
+    height: 36px;
+    min-height: 36px;
+  }
+  .sh-rail hr {
+    margin-block: 3px;
+  }
+}
 
 .sh-bottom {
   display: grid;
@@ -894,6 +910,39 @@ h1.sh-filename {
 [data-layout="desktop"] .sh-options-row {
   flex-wrap: wrap;
   overflow-x: visible;
+}
+/* landscape phones: one row, so the card leaves the page visible */
+@media (max-height: 479px) {
+  .sh-options {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+  }
+  .sh-options-head {
+    display: contents;
+  }
+  .sh-options-head p {
+    flex: 0 1 auto;
+    width: auto;
+  }
+  .sh-options-head p strong {
+    white-space: nowrap;
+  }
+  .sh-options:has(.sh-options-row) .sh-options-head p {
+    flex: none;
+  }
+  .sh-options:has(.sh-options-row) .sh-options-head p span {
+    display: none;
+  }
+  .sh-options-head > button {
+    flex: none;
+    order: 1;
+  }
+  .sh-options-row {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
 }
 .sh-stepper {
   display: flex;
@@ -1132,7 +1181,8 @@ h1.sh-filename {
 }
 .sh-findcard .sh-pad {
   gap: var(--space-2);
-  padding-top: 0;
+  /* room for the focus ring: the scroller clips anything outside it */
+  padding-top: 5px;
   padding-bottom: var(--space-1);
 }
 .sh-findcard .sh-details .sh-results {

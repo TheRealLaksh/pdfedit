@@ -1,11 +1,32 @@
 /** Busy overlay, toasts, drop target and the small status chips (placement, text recognition). */
 import { CheckCircle, FileArrowUp, Info, Warning, WarningCircle, X } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
+import { engineReady } from "../../engine/client";
 import { useStore, type Toast } from "../../store";
 import { Button, IconButton, Progress } from "./controls";
 
 /** quick edits must not flash a spinner */
 const DELAY = 350;
+
+let engineLoaded = false;
+void engineReady.then(() => (engineLoaded = true));
+
+/** true while the wait is really for the first download of the editor (a cached start is over sooner) */
+function useDownloadingEditor(waiting: boolean): boolean {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (!waiting || engineLoaded) return;
+    let live = true;
+    const timer = setTimeout(() => live && !engineLoaded && setSlow(true), 800);
+    void engineReady.then(() => live && setSlow(false));
+    return () => {
+      live = false;
+      clearTimeout(timer);
+      setSlow(false);
+    };
+  }, [waiting]);
+  return slow;
+}
 
 export function BusyOverlay() {
   const busy = useStore((s) => s.busy);
@@ -13,6 +34,7 @@ export function BusyOverlay() {
   const card = useRef<HTMLDivElement>(null);
   const active = busy !== null;
   const slowStart = !!busy && /^(Opening|Preparing|Turning|Adding|Reading)/.test(busy);
+  const downloading = useDownloadingEditor(active);
 
   useEffect(() => {
     if (!active) {
@@ -28,7 +50,7 @@ export function BusyOverlay() {
       {visible && busy && (
         <div ref={card} className="sh-busy-card">
           <span className="sh-spinner" aria-hidden />
-          <span className="sh-break">{busy}…</span>
+          <span className="sh-break">{downloading ? "Downloading the editor (first visit only)" : busy}…</span>
         </div>
       )}
     </div>

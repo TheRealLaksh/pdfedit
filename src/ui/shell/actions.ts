@@ -19,12 +19,15 @@ export function pickFiles(accept: string, multiple = false): Promise<File[]> {
     input.className = "sh-hidden-file";
     input.setAttribute("aria-hidden", "true");
     input.tabIndex = -1;
+    let cancelled: ReturnType<typeof setTimeout> | undefined;
     const done = (files: File[]) => {
+      clearTimeout(cancelled);
       input.remove();
       resolve(files);
     };
     input.addEventListener("change", () => done(Array.from(input.files ?? [])), { once: true });
-    input.addEventListener("cancel", () => done([]), { once: true });
+    // wait a moment: some engines (automated Firefox) report "cancel" and then deliver the files anyway
+    input.addEventListener("cancel", () => (cancelled = setTimeout(() => done([]), 1000)), { once: true });
     // iOS needs the input in the document
     document.body.appendChild(input);
     input.click();

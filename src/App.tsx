@@ -2,6 +2,7 @@
 import { useEffect, useLayoutEffect } from "react";
 import { useStore } from "./store";
 import { downloadWhenReady, dropOnDocument, openAnother } from "./ui/shell/actions";
+import { useBackGuard } from "./ui/shell/backGuard";
 import { Dialogs } from "./ui/shell/Dialogs";
 import { BusyOverlay, DropTarget, StatusChips, Toasts } from "./ui/shell/Feedback";
 import { useDesktop, useViewportVars } from "./ui/shell/hooks";
@@ -71,30 +72,6 @@ function useUnsavedWarning() {
   }, [unsaved]);
 }
 
-/**
- * Adds one history entry while a sheet is open on a phone, so the back gesture closes the sheet
- * instead of leaving the page. Closing it any other way removes the entry again.
- */
-function useBackToClose(active: boolean) {
-  useEffect(() => {
-    if (!active) return;
-    if (!history.state?.pdfeditSheet) history.pushState({ pdfeditSheet: true }, "");
-    const onPop = () => {
-      useShell.getState().setMenu(false);
-      useStore.getState().openPanel(null);
-    };
-    window.addEventListener("popstate", onPop);
-    return () => {
-      window.removeEventListener("popstate", onPop);
-      // deferred: switching from the menu to a panel keeps the same entry
-      setTimeout(() => {
-        const open = useStore.getState().panel !== null || useShell.getState().menuOpen;
-        if (!open && history.state?.pdfeditSheet) history.back();
-      }, 0);
-    };
-  }, [active]);
-}
-
 function Editor({ desktop }: { desktop: boolean }) {
   const editing = useStore((s) => s.editing !== null);
   const placing = useStore((s) => s.placement !== null);
@@ -114,7 +91,15 @@ function Editor({ desktop }: { desktop: boolean }) {
 
   return (
     <div className="sh-app" data-layout={desktop ? "desktop" : "phone"}>
-      <a className="sh-skip" href="#sh-document">
+      <a
+        className="sh-skip"
+        href="#sh-document"
+        // moving the focus without a history step: Back belongs to the guard below
+        onClick={(e) => {
+          e.preventDefault();
+          document.getElementById("sh-document")?.focus();
+        }}
+      >
         Skip to document
       </a>
       <TopBar desktop={desktop} />
@@ -138,15 +123,13 @@ function Editor({ desktop }: { desktop: boolean }) {
 export function App() {
   const hasDoc = useStore((s) => s.doc !== null);
   const openFiles = useStore((s) => s.openFiles);
-  const panelOpen = useStore((s) => s.panel !== null);
-  const menuOpen = useShell((s) => s.menuOpen);
   const desktop = useDesktop();
   useTheme();
   useViewportVars();
   useShortcuts();
   useUnsavedWarning();
   useToolColors();
-  useBackToClose(!desktop && (panelOpen || menuOpen));
+  useBackGuard(!desktop);
   useEffect(() => registerServiceWorker(), []);
 
   useEffect(() => {

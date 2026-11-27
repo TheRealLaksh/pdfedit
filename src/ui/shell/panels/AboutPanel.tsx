@@ -18,6 +18,9 @@ const SHORTCUTS = [
   ["Ctrl+S", "Download"],
   ["Ctrl+F", "Find and replace"],
   ["Ctrl+Z / Ctrl+Y", "Undo / redo"],
+  ["Ctrl+Plus / Minus / 0", "Zoom in, out, fit"],
+  ["Delete", "Remove the selected item or pages"],
+  ["Arrows (+ Shift)", "Move the selected item"],
   ["Esc", "Close or cancel"],
 ];
 
