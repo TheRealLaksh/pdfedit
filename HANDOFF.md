@@ -65,12 +65,13 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 <!-- handoff:auto:start -->
 ## Auto: repo state
 
-_Refreshed 27 Nov 2026, 10:42 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
+_Refreshed 27 Nov 2026, 11:06 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
 
 Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `e3f850d` 2026-11-27 22:42 docs: record Cloudflare Pages project and domain
 - `c2c020b` 2026-11-27 22:37 fix(engine): record an undo step only when the document changed
 - `e6302e6` 2026-11-27 22:37 feat(ocr): in-browser recognition and native-looking edits on scanned pages
 - `8982559` 2026-11-27 22:30 docs: handoff status for text and tests
@@ -85,11 +86,41 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `41db324` 2026-11-27 22:06 fix(engine): hold calls until the worker has loaded so an early open cannot hang
 - `c562164` 2026-11-27 21:51 docs: handoff status for operations and shell
 - `08908b8` 2026-11-27 21:50 feat(shell): start screen, editor chrome, panels and dialogs
-- `942591c` 2026-11-27 21:50 feat(shell): design tokens, app icons and PWA assets
 
 ### Uncommitted changes at refresh time
 
 ```
-M  HANDOFF.md
+M  public/sw.js
+ M src/engine/client.ts
+ M src/engine/engine.ts
+ M src/engine/fonts/draw.ts
+ M src/engine/fonts/index.ts
+ M src/engine/fonts/inspect.ts
+ M src/engine/fonts/layout.ts
+ M src/engine/fonts/types.ts
+ M src/engine/ops/export.ts
+ M src/engine/ops/images.ts
+ M src/engine/text/analyze.ts
+ M src/engine/text/diff.ts
+ M src/engine/text/edit.ts
+ M src/engine/text/encode.ts
+ M src/engine/text/layout.ts
+ M src/engine/text/pdffont.ts
+ M src/engine/text/rewrite.ts
+ M src/engine/worker.ts
+ M src/ocr/tess.ts
+ M src/store/index.ts
+ M src/ui/shell/panels/AboutPanel.tsx
+ M src/ui/shell/panels/PagesPanel.tsx
+ M src/ui/shell/shell.css
+M  src/ui/viewer/Overlays.tsx
+M  src/ui/viewer/editor/StyleBar.tsx
+M  src/ui/viewer/editor/TextEditor.tsx
+M  src/ui/viewer/viewer.css
+ M tests/text/mockFonts.ts
+?? src/engine/ops/guard.ts
+?? tests/e2e/desktop.spec.ts
+?? tests/integration/robustness.test.ts
+?? tests/ocr/pin.test.ts
 ```
 <!-- handoff:auto:end -->

@@ -63,6 +63,31 @@ export interface StyleBarProps {
   /** the move controls are open */
   moving: boolean;
   onMoving(value: boolean): void;
+  /** very little height: the move controls replace the style controls instead of adding a row */
+  oneRow?: boolean;
+}
+
+/** marks the side where more controls are scrolled out of sight, so that edge can be faded */
+function useOverflowHint() {
+  const strip = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = strip.current;
+    if (!el) return;
+    const update = () => {
+      const start = el.scrollLeft > 2;
+      const end = el.scrollLeft < el.scrollWidth - el.clientWidth - 2;
+      el.dataset.more = start && end ? "both" : start ? "start" : end ? "end" : "";
+    };
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => {
+      el.removeEventListener("scroll", update);
+      observer.disconnect();
+    };
+  });
+  return strip;
 }
 
 /** buttons must not take the focus: the phone keyboard would close */
@@ -128,10 +153,13 @@ export function StyleBar(props: StyleBarProps) {
   );
   const alignIndex = ALIGN.findIndex(([a]) => a === align);
   const current = ALIGN[Math.max(0, alignIndex)]!;
+  const strip = useOverflowHint();
+  const onlyMove = !!props.oneRow && moving;
 
   return (
     <div className="pv-style" onMouseDown={keepFocus}>
-      <div className="pv-tools" role="toolbar" aria-label="Text style">
+      {/* hidden rather than removed, so the font list and scroll position survive */}
+      <div ref={strip} className="pv-tools" role="toolbar" aria-label="Text style" hidden={onlyMove}>
         <select
           className="pv-select"
           aria-label="Font"
@@ -216,6 +244,11 @@ export function StyleBar(props: StyleBarProps) {
           <button type="button" className="pv-btn pv-btn-text" disabled={!props.moved} onClick={props.onResetMove}>
             <ArrowCounterClockwiseIcon /> Reset
           </button>
+          {onlyMove && (
+            <Tool label="Move" pressed onClick={() => props.onMoving(false)}>
+              <ArrowsOutCardinalIcon />
+            </Tool>
+          )}
         </div>
       )}
     </div>

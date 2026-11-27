@@ -23,6 +23,11 @@
   overflow-anchor: none;
   -webkit-tap-highlight-color: transparent;
 }
+/* a phone held sideways: keep the pages clear of the notch (desktop chrome handles it itself) */
+[data-layout="phone"] .pv-scroll {
+  left: env(safe-area-inset-left, 0px);
+  right: env(safe-area-inset-right, 0px);
+}
 .pv-scroll:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
@@ -151,6 +156,11 @@
 }
 
 /* ---------- text lines and search (colours fixed: they sit on white paper) ---------- */
+
+/* a line that runs off the page is cut there, as it is in the file */
+.pv-edit-layer > .pv-svg {
+  overflow: hidden;
+}
 
 .pv-linebox {
   fill: rgb(47 91 234 / 0.045);
@@ -605,7 +615,8 @@ label.pv-btn:focus-within,
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  box-shadow: 0 0 0 1px var(--border), inset 0 0 0 1px rgb(255 255 255 / 0.25);
+  /* a black or white swatch must stand out in either theme */
+  box-shadow: 0 0 0 1px var(--control-border, var(--border)), inset 0 0 0 1px rgb(255 255 255 / 0.25);
 }
 .pv-colour input,
 .pv-file {
@@ -718,8 +729,50 @@ label.pv-btn {
   outline: none;
   border-color: var(--accent);
 }
+/* exactly two lines */
 .pv-dock-short .pv-field {
-  max-height: 64px;
+  max-height: calc(2.8em + 21px);
+}
+.pv-field-swap {
+  flex: 1;
+  min-width: 0;
+}
+.pv-dock .pv-field-swap .pv-style {
+  padding: 0;
+}
+.pv-field-swap .pv-nudge {
+  justify-content: flex-start;
+  border-top: 0;
+}
+/* out of sight but still focused, so the keyboard stays open */
+.pv-dock .pv-field-away {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  height: 1px !important;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* the controls scroll sideways: fade the edge that hides more of them */
+.pv-tools[hidden] {
+  display: none;
+}
+.pv-tools[data-more="end"] {
+  -webkit-mask-image: linear-gradient(to left, transparent, #000 40px);
+  mask-image: linear-gradient(to left, transparent, #000 40px);
+}
+.pv-tools[data-more="start"] {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 40px);
+  mask-image: linear-gradient(to right, transparent, #000 40px);
+}
+.pv-tools[data-more="both"] {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 40px, #000 calc(100% - 40px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 40px, #000 calc(100% - 40px), transparent);
 }
 
 .pv-keeper {

@@ -245,7 +245,8 @@ let hinted = false;
 function Hint() {
   const compact = useCompact();
   const [shown, setShown] = useState(!hinted);
-  const found = usePageData("text", useStore((s) => s.currentPage), shown).data?.lines.length;
+  // yes or no, so that scrolling between pages does not restart the timer
+  const found = !!usePageData("text", useStore((s) => s.currentPage), shown).data?.lines.length;
   useEffect(() => {
     if (!shown || !found) return;
     const timer = setTimeout(() => {
@@ -269,7 +270,11 @@ export function ActionOverlay() {
   const selection = useStore((s) => !!s.selection);
   const redacting = useViewer((s) => Object.keys(s.redactions).length > 0);
   const inking = useViewer((s) => !!s.ink);
-  if (editing) return null;
+  if (editing) {
+    // someone who has opened a line does not need to be told how
+    hinted = true;
+    return null;
+  }
   if (redacting) return <RedactionBar />;
   if (selection) return <SelectionBar />;
   if (inking) return <InkBar />;

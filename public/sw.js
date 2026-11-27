@@ -68,10 +68,23 @@ async function precacheApp(cache) {
   // the page is saved last, so the offline copy never points at files we do not have
   if (!complete) return;
   await cache.put("/", response);
+  const keep = await remember(cache, [...seen].sort());
   for (const request of await cache.keys()) {
     const path = new URL(request.url).pathname;
-    if (path.startsWith("/assets/") && !seen.has(path)) await cache.delete(request);
+    if (path.startsWith("/assets/") && !keep.has(path)) await cache.delete(request);
   }
+}
+
+/**
+ * Notes which files the newest build uses and returns everything worth keeping: that build and the one
+ * before it, because a tab opened before a deploy still loads parts of the old one later.
+ */
+async function remember(cache, files) {
+  const saved = await cache.match("/__build");
+  let { current = [], previous = [] } = saved ? await saved.json().catch(() => ({})) : {};
+  if (current.join() !== files.join()) [previous, current] = [current, files];
+  await cache.put("/__build", new Response(JSON.stringify({ current, previous })));
+  return new Set([...current, ...previous]);
 }
 
 function references(text, base) {

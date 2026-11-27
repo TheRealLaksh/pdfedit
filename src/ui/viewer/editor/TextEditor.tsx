@@ -541,8 +541,12 @@ function Session({ id, page, lineId, source, revision, scale }: {
       onDelete={remove}
       moving={moving}
       onMoving={setMoving}
+      oneRow={compact && short}
     />
   );
+
+  // short screens keep the dock to one row: the style and move controls take the field's place
+  const swapped = compact && short && (showTools || moving);
 
   const cancelButton = (
     <button type="button" className="pv-btn" aria-label="Cancel" title="Cancel (Esc)" onMouseDown={(e) => e.preventDefault()} onClick={close} data-testid="editor-cancel">
@@ -578,23 +582,28 @@ function Session({ id, page, lineId, source, revision, scale }: {
           dockRef={dock}
           short={short}
           onMoved={() => {
-            // landscape (or very small) phones with the keyboard up: one row only
-            setShort((window.visualViewport?.height ?? window.innerHeight) < 320);
+            // landscape phones with the keyboard up: one row only
+            setShort((window.visualViewport?.height ?? window.innerHeight) < 280);
             ensureVisible.current(true);
           }}
         >
-          {(!short || showTools) && styleBar}
+          {!short && styleBar}
           <div className="pv-field-row">
             {cancelButton}
-            <textarea {...fieldProps} className="pv-field" />
+            {swapped && <div className="pv-field-swap">{styleBar}</div>}
+            {/* stays mounted and focused while swapped out, so the keyboard does not close */}
+            <textarea {...fieldProps} className={swapped ? "pv-field pv-field-away" : "pv-field"} />
             {short && (
               <button
                 type="button"
                 className="pv-btn"
                 aria-label="Text style"
-                aria-pressed={showTools}
+                aria-pressed={swapped}
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => setShowTools((v) => !v)}
+                onClick={() => {
+                  setShowTools(!swapped);
+                  setMoving(false);
+                }}
               >
                 <TextAaIcon />
               </button>
