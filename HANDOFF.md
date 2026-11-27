@@ -58,6 +58,7 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `41db324` 2026-11-27 22:06 fix(engine): hold calls until the worker has loaded so an early open cannot hang
 - `c562164` 2026-11-27 21:51 docs: handoff status for operations and shell
 - `08908b8` 2026-11-27 21:50 feat(shell): start screen, editor chrome, panels and dialogs
 - `942591c` 2026-11-27 21:50 feat(shell): design tokens, app icons and PWA assets
@@ -75,11 +76,36 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 ### Uncommitted changes at refresh time
 
 ```
-M  src/engine/client.ts
- M src/engine/ocr/index.ts
+M src/engine/ocr/index.ts
  M src/engine/text/index.ts
  M src/ocr/index.ts
- M src/ui/viewer/Viewer.tsx
+A  src/ui/viewer/Overlays.tsx
+A  src/ui/viewer/PageCanvas.tsx
+A  src/ui/viewer/PageView.tsx
+M  src/ui/viewer/Viewer.tsx
+A  src/ui/viewer/canvasRegistry.ts
+A  src/ui/viewer/context.ts
+A  src/ui/viewer/device.ts
+A  src/ui/viewer/editor/Dock.tsx
+A  src/ui/viewer/editor/Preview.tsx
+A  src/ui/viewer/editor/StyleBar.tsx
+A  src/ui/viewer/editor/TextEditor.tsx
+A  src/ui/viewer/editor/controller.ts
+A  src/ui/viewer/editor/textMetrics.ts
+A  src/ui/viewer/geometry.ts
+A  src/ui/viewer/layers/DrawLayer.tsx
+A  src/ui/viewer/layers/EditTextLayer.tsx
+A  src/ui/viewer/layers/PlaceLayer.tsx
+A  src/ui/viewer/layers/RedactionLayer.tsx
+A  src/ui/viewer/layers/SelectLayer.tsx
+A  src/ui/viewer/layers/StaticLayers.tsx
+A  src/ui/viewer/layers/pointer.ts
+A  src/ui/viewer/pageData.ts
+A  src/ui/viewer/renderQueue.ts
+A  src/ui/viewer/useViewport.ts
+A  src/ui/viewer/viewer.css
+A  src/ui/viewer/viewerApi.ts
+A  src/ui/viewer/viewerStore.ts
 ?? playwright.config.ts
 ?? src/engine/ocr/edit.ts
 ?? src/engine/ocr/fit.ts
@@ -109,21 +135,6 @@ M  src/engine/client.ts
 ?? src/ocr/languages.ts
 ?? src/ocr/preprocess.ts
 ?? src/ocr/tess.ts
-?? src/ui/viewer/Overlays.tsx
-?? src/ui/viewer/PageCanvas.tsx
-?? src/ui/viewer/PageView.tsx
-?? src/ui/viewer/canvasRegistry.ts
-?? src/ui/viewer/context.ts
-?? src/ui/viewer/device.ts
-?? src/ui/viewer/editor/
-?? src/ui/viewer/geometry.ts
-?? src/ui/viewer/layers/
-?? src/ui/viewer/pageData.ts
-?? src/ui/viewer/renderQueue.ts
-?? src/ui/viewer/useViewport.ts
-?? src/ui/viewer/viewer.css
-?? src/ui/viewer/viewerApi.ts
-?? src/ui/viewer/viewerStore.ts
 ?? tests/e2e/
 ?? tests/fixtures/
 ?? tests/integration/
