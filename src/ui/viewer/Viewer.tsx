@@ -14,6 +14,18 @@ import "./viewer.css";
 
 export { getViewerScale, zoomBy } from "./viewerApi";
 
+/**
+ * Undo or redo with a text field open: the draft is saved first, so undo takes back exactly that edit
+ * (and redo can bring it back). Returns false when there was nothing to save.
+ */
+function saveThen(action: "undo" | "redo"): boolean {
+  const saving = editors.current?.commit();
+  if (!saving) return false;
+  // after a new edit there is nothing left to redo
+  if (action === "undo") void saving.then((saved) => saved && useStore.getState().undo());
+  return true;
+}
+
 export function Viewer() {
   const root = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
@@ -46,8 +58,18 @@ export function Viewer() {
     const onClick = (e: MouseEvent) => {
       const target = e.target as Element;
       if (!target.isConnected || root.current?.contains(target) || target.closest("[data-pv-ui]")) return;
-      // zooming keeps the field open; undo and redo drop the unsaved text (the store closes the editor)
-      if (/^(zoom|undo|redo|show at actual|fit to)/i.test(target.closest("button")?.getAttribute("aria-label") ?? "")) return;
+      const label = target.closest("button")?.getAttribute("aria-label") ?? "";
+      // zooming keeps the field open
+      if (/^(zoom|show at actual|fit to)/i.test(label)) return;
+      const history = /^(undo|redo)/i.exec(label)?.[1]?.toLowerCase() as "undo" | "redo" | undefined;
+      if (history && editors.current) {
+        // the button's own handler would run while the save is still busy and do nothing: take over
+        if (saveThen(history)) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        return;
+      }
       editors.current?.commit();
       void flushInk();
     };
@@ -84,10 +106,10 @@ export function Viewer() {
       if (typing) return;
       if (mod && !e.altKey && key === "z" && !e.shiftKey) {
         e.preventDefault();
-        if (!undoInkStroke()) void store.undo();
+        if (!undoInkStroke() && !saveThen("undo")) void store.undo();
       } else if (mod && !e.altKey && (key === "y" || (key === "z" && e.shiftKey))) {
         e.preventDefault();
-        void store.redo();
+        if (!saveThen("redo")) void store.redo();
       } else if ((e.key === "Delete" || e.key === "Backspace") && store.selection && !mod) {
         e.preventDefault();
         void store.deleteSelection();

@@ -68,7 +68,8 @@ function PageNav() {
 export function TopBar({ desktop }: { desktop: boolean }) {
   const doc = useStore((s) => s.doc)!;
   const dirty = useStore((s) => s.dirty);
-  const canUndo = useStore((s) => s.canUndo);
+  // while a field is open, undo saves the draft first and then reverts it (the viewer handles that)
+  const canUndo = useStore((s) => s.canUndo || !!s.editing);
   const canRedo = useStore((s) => s.canRedo);
   const busy = useStore((s) => s.busy !== null);
   const undo = useStore((s) => s.undo);

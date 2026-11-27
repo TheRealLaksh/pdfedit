@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { engine } from "../../engine/client";
 import type { ImageItem, PageObject, PageText } from "../../engine/types";
 import { useStore } from "../../store";
+import { isCurrent, whenSettled } from "./documentGate";
 
 interface Kinds {
   text: PageText;
@@ -29,7 +30,7 @@ export function loadPageData<K extends keyof Kinds>(kind: K, page: number): Prom
   const key = keyOf(kind, session, page, revision);
   let p = cache.get(key) as Promise<Kinds[K]> | undefined;
   if (!p) {
-    p = loaders[kind](page);
+    p = request(kind, page, session);
     cache.set(key, p);
     p.then(
       (v) => cache.has(key) && values.set(key, v),
@@ -42,6 +43,22 @@ export function loadPageData<K extends keyof Kinds>(kind: K, page: number): Prom
     }
   }
   return p;
+}
+
+/**
+ * Ask the engine, unless the document is being closed or replaced. A request that has become stale never
+ * settles: whoever asked belongs to the old document and is gone.
+ */
+function request<K extends keyof Kinds>(kind: K, page: number, session: number): Promise<Kinds[K]> {
+  return new Promise((resolve, reject) => {
+    whenSettled(() => {
+      if (!isCurrent(session)) return;
+      loaders[kind](page).then(
+        (value) => isCurrent(session) && resolve(value),
+        (error: unknown) => isCurrent(session) && reject(error),
+      );
+    });
+  });
 }
 
 export function peekPageData<K extends keyof Kinds>(kind: K, page: number): Kinds[K] | undefined {

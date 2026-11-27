@@ -4,6 +4,7 @@
  */
 import { engine } from "../../engine/client";
 import type { Rect } from "../../engine/types";
+import { documentChanging, isCurrent, whenSettled } from "./documentGate";
 
 const coarse = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
 
@@ -114,6 +115,9 @@ function schedule() {
 
 async function pump() {
   if (busy) return;
+  // resumed once the document has been closed or replaced
+  if (documentChanging()) return whenSettled(schedule);
+  for (const [k, j] of jobs) if (!isCurrent(j.spec.session)) jobs.delete(k);
   let key = "";
   let job: Job | undefined;
   let best = Infinity;
@@ -137,7 +141,8 @@ async function pump() {
     remember(keyOf({ ...job.spec, session, revision: out.revision }), bitmap);
     for (const l of listeners) l.done(bitmap);
   } catch (e) {
-    for (const l of job.listeners) l.fail(e instanceof Error ? e : new Error(String(e)));
+    if (isCurrent(job.spec.session))
+      for (const l of job.listeners) l.fail(e instanceof Error ? e : new Error(String(e)));
   } finally {
     if (jobs.get(key) === job) jobs.delete(key);
     busy = false;
