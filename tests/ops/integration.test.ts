@@ -163,6 +163,33 @@ describe("with the real OCR module", () => {
 const CORPUS = "tests/fixtures/pdfs";
 const files = existsSync(CORPUS) ? readdirSync(CORPUS).filter((f) => f.endsWith(".pdf")) : [];
 
+describe.skipIf(!files.length)("redacting one line of each fixture changes nothing else", () => {
+  it.each(files)("%s", { timeout: 120_000 }, async (file) => {
+    const engine = new Engine(assets);
+    const bytes = new Uint8Array(readFileSync(`${CORPUS}/${file}`));
+    let result = await engine.open(bytes, file);
+    if (result.status === "password") result = await engine.open(bytes, file, "test1234");
+    const line = (await engine.getPageText(0)).lines.find((l) => l.source === "content");
+    if (!line) return;
+    const before = await engine.renderPage(0, 1);
+    await engine.redactAreas(0, [line.rect]);
+    const after = await engine.renderPage(0, 1);
+    // glyphs overlapping the area (a neighbouring line's descenders) may go too
+    const reach = Math.max(8, line.rect[3] - line.rect[1]);
+    const [x0, y0, x1, y1] = [line.rect[0] - reach, line.rect[1] - reach, line.rect[2] + reach, line.rect[3] + reach];
+    let changed = 0;
+    for (let y = 0; y < before.height; y++)
+      for (let x = 0; x < before.width; x++) {
+        if (x >= x0 && x <= x1 && y >= y0 && y <= y1) continue;
+        const i = (y * before.width + x) * 4;
+        if ([0, 1, 2].some((c) => Math.abs(before.data[i + c]! - after.data[i + c]!) > 32)) changed++;
+      }
+    if (changed > 20) savePng(engine.context.doc, 0, `redact-other-${file}`);
+    expect(changed).toBeLessThanOrEqual(20);
+    await engine.close();
+  });
+});
+
 describe.skipIf(!files.length)("every operation over the fixture corpus", () => {
   it.each(files)("%s", { timeout: 180_000 }, async (file) => {
     const engine = new Engine(assets);

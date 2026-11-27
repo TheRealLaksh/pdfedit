@@ -391,23 +391,16 @@ export async function insertPdf(ctx: EngineContext, bytes: Uint8Array, at: numbe
 export async function insertImagesAsPages(ctx: EngineContext, images: Uint8Array[], at: number): Promise<ModuleChange> {
   if (!images.length) throw new Error("No images selected");
   const { doc } = ctx;
-  // Engine.createFromImages fills a brand new journaled document outside of any operation
-  const fresh = doc.countPages() === 0;
-  if (fresh) doc.beginImplicitOperation();
-  try {
-    const position = insertPosition(doc, at);
-    const added = images.map((data) => {
-      const image = embedImage(ctx, data);
-      const [width, height] = imagePageSize(image.width, image.height, image.dpi);
-      const resources = doc.newDictionary();
-      resources.put("XObject", { Im0: image.ref });
-      const content = `q ${width.toFixed(3)} 0 0 ${height.toFixed(3)} 0 0 cm ${image.orient.join(" ")} cm /Im0 Do Q`;
-      return newPage(doc, width, height, resources, encodeLatin1(content));
-    });
-    return insertRefs(ctx, position, added);
-  } finally {
-    if (fresh) doc.endOperation();
-  }
+  const position = insertPosition(doc, at);
+  const added = images.map((data) => {
+    const image = embedImage(ctx, data);
+    const [width, height] = imagePageSize(image.width, image.height, image.dpi);
+    const resources = doc.newDictionary();
+    resources.put("XObject", { Im0: image.ref });
+    const content = `q ${width.toFixed(3)} 0 0 ${height.toFixed(3)} 0 0 cm ${image.orient.join(" ")} cm /Im0 Do Q`;
+    return newPage(doc, width, height, resources, encodeLatin1(content));
+  });
+  return insertRefs(ctx, position, added);
 }
 
 /** real size for scans that say their resolution, otherwise an A4-sized long edge in the image's shape */

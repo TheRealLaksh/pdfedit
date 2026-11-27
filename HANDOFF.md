@@ -55,12 +55,13 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 <!-- handoff:auto:start -->
 ## Auto: repo state
 
-_Refreshed 27 Nov 2026, 10:19 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
+_Refreshed 27 Nov 2026, 10:22 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
 
 Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `e74c459` 2026-11-27 22:19 fix(engine): leave internal font names out of the substitution notice
 - `83b812e` 2026-11-27 22:18 test: integration and browser test suites
 - `07b5c8a` 2026-11-27 22:18 test: multi-language PDF corpus and Playwright config
 - `5d86f69` 2026-11-27 22:07 fix(shell): zoom buttons follow the viewer's real fit scale
@@ -75,15 +76,25 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `fda0c3d` 2026-11-27 21:49 feat(fonts): font catalog, HarfBuzz shaping and embedding for all scripts
 - `2613fab` 2026-11-27 21:14 feat(app): shared store, design tokens and entry point
 - `34797a1` 2026-11-27 21:14 feat(engine): engine router, journal undo and worker bridge
-- `0b80a57` 2026-11-27 21:14 feat(engine): content stream tokenizer and page helpers
 
 ### Uncommitted changes at refresh time
 
 ```
-M  src/engine/engine.ts
- M src/engine/ocr/index.ts
+M src/engine/ocr/index.ts
+M  src/engine/ops/clone.ts
+M  src/engine/ops/export.ts
+M  src/engine/ops/pages.ts
+M  src/engine/ops/readingOrder.ts
+M  src/engine/ops/redact.ts
+M  src/engine/ops/redactContent.ts
  M src/engine/text/index.ts
  M src/ocr/index.ts
+ M src/ui/viewer/Viewer.tsx
+ M src/ui/viewer/pageData.ts
+ M src/ui/viewer/renderQueue.ts
+ M src/ui/viewer/viewer.css
+M  tests/ops/integration.test.ts
+A  tests/ops/regressions.test.ts
 ?? src/engine/ocr/edit.ts
 ?? src/engine/ocr/fit.ts
 ?? src/engine/ocr/ink.ts
@@ -112,6 +123,7 @@ M  src/engine/engine.ts
 ?? src/ocr/languages.ts
 ?? src/ocr/preprocess.ts
 ?? src/ocr/tess.ts
+?? src/ui/viewer/documentGate.ts
 ?? tests/ocr/
 ?? tests/text/
 ```

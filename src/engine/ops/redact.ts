@@ -4,7 +4,9 @@ import { apply, intersects, rectFromPoints, rectToQuad, transformRect } from "..
 import type { Matrix, Point, Rect } from "../types";
 import { removeAnnots, scrubStructure } from "./annots";
 import { objectBounds } from "./objects";
-import { censusText, cutContent, dropUnusedProperties, scrubCopies, type Redaction } from "./redactContent";
+import {
+  censusText, cutContent, dropUnusedProperties, scrubCopies, shieldStrokeState, strokesText, type Redaction,
+} from "./redactContent";
 import { opsState } from "./state";
 import {
   assertPage, normalizeRect, numbers, ownResources, pageBounds, readPageContent, withPage, writePageContent,
@@ -41,6 +43,12 @@ export async function redactAreas(ctx: EngineContext, page: number, rects: Rect[
     const result = cutContent(job, readPageContent(p), resources, { ctm: [1, 0, 0, 1, 0, 0], clip: null, lineWidth: 1 });
     cut = result.changed;
     writePageContent(doc, p, result.content);
+  });
+
+  withPage(doc, page, (p) => {
+    const resources = ownResources(doc, p);
+    const content = readPageContent(p);
+    if (strokesText(content, resources)) writePageContent(doc, p, shieldStrokeState(job, content, resources).content);
   });
 
   // text and image pixels

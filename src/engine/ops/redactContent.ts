@@ -252,6 +252,62 @@ export function censusText(content: Uint8Array, resources: Obj, into: TextCensus
   return into;
 }
 
+/* ---------- stroke state ---------- */
+
+/** operators MuPDF's redaction filter forgets when the only thing they affect is stroked text */
+const STROKE_KEYS: Record<string, string> = { w: "LW", J: "LC", j: "LJ", M: "ML", d: "D" };
+/** marks a graphics state that stands in for one of those operators */
+const STAND_IN = "PEOp";
+
+export function strokesText(content: Uint8Array, resources: Obj, depth = 0): boolean {
+  return parseContent(content).some((operation) => {
+    const mode = operation.operands[0];
+    if (operation.op === "Tr") return mode?.type === "number" && [1, 2, 5, 6].includes(mode.value);
+    const x = depth < 12 ? xobjectOf(operation, resources) : null;
+    if (x?.subtype !== "Form") return false;
+    const own = x.object.get("Resources");
+    return strokesText(streamBytes(x.object), own.isDictionary() ? own : resources, depth + 1);
+  });
+}
+
+const operandValue = (o: Operand): unknown =>
+  o.type === "number" ? o.value : o.type === "array" ? o.value.map(operandValue) : 0;
+
+/**
+ * Write line width, caps, joins and dashes as `gs` operators, which survive the filter; scrubCopies turns
+ * them back afterwards. `resources` must be private to this stream.
+ */
+export function shieldStrokeState(job: Redaction, content: Uint8Array, resources: Obj, depth = 0): Rewrite {
+  const { doc } = job.ctx;
+  const edits: Edit[] = [];
+  const replaced = new Set<string>();
+  for (const operation of parseContent(content)) {
+    const { op, operands, start, end } = operation;
+    const key = STROKE_KEYS[op];
+    if (key && operands.length) {
+      const state = doc.newDictionary();
+      state.put("Type", doc.newName("ExtGState"));
+      state.put(key, op === "d" ? operands.map(operandValue) : operandValue(operands[0]!));
+      state.put(STAND_IN, doc.newString(latin1(content.subarray(start, end))));
+      const name = addResource(doc, resources, "ExtGState", "PEs", doc.addObject(state));
+      edits.push({ start, end, replacement: `/${name} gs` });
+      continue;
+    }
+    const x = depth < 12 ? xobjectOf(operation, resources) : null;
+    if (x?.subtype !== "Form") continue;
+    const own = x.object.get("Resources");
+    const formResources = copyResources(doc, own.isDictionary() ? own : resources);
+    const inner = shieldStrokeState(job, streamBytes(x.object), formResources, depth + 1);
+    if (!inner.changed) continue;
+    edits.push(replaceForm(job, operation, resources, x.object, inner.content, formResources));
+    replaced.add(x.name);
+  }
+  if (!edits.length) return { content, changed: false };
+  const next = spliceContent(content, edits);
+  dropUnused(next, resources, replaced);
+  return { content: next, changed: true };
+}
+
 /* ---------- walking and rewriting ---------- */
 
 export interface Rewrite {
@@ -369,7 +425,7 @@ export function dropUnusedProperties(content: Uint8Array, resources: Obj): void 
   for (const name of unused) dict.delete(name);
 }
 
-/** drop text copies whose text is no longer (completely) there */
+/** drop text copies whose text is no longer (completely) there, and restore shielded stroke operators */
 export function scrubCopies(job: Redaction, content: Uint8Array, resources: Obj, before: TextCensus, depth = 0): Rewrite {
   const ops = parseContent(content);
   const edits: Edit[] = [];
@@ -383,6 +439,16 @@ export function scrubCopies(job: Redaction, content: Uint8Array, resources: Obj,
       if (edit) edits.push(edit);
     }
   }
+  const standIns = new Set<string>();
+  for (const operation of ops) {
+    const name = operation.operands[0];
+    if (operation.op !== "gs" || name?.type !== "name") continue;
+    const original = resources.get("ExtGState", name.value, STAND_IN);
+    if (!original.isString()) continue;
+    edits.push({ start: operation.start, end: operation.end, replacement: original.asString() });
+    standIns.add(name.value);
+  }
+  for (const name of standIns) resources.get("ExtGState").delete(name);
   for (const operation of ops) {
     const x = xobjectOf(operation, resources);
     if (x?.subtype !== "Form" || depth >= 12) continue;

@@ -3,12 +3,13 @@ import type * as MuPDF from "mupdf";
 import type { EngineContext } from "../context";
 import { encodeLatin1 } from "../content/tokenizer";
 import * as ocr from "../ocr";
+import { rectToQuad } from "../geom";
 import * as text from "../text";
 import type { ExportOptions, PageText, Rect } from "../types";
 import { ensureAppearances } from "./forms";
 import { cloneDocument } from "./clone";
 import { discardPages, pageRefs } from "./pages";
-import { readingOrder, type Fragment } from "./readingOrder";
+import { orderByDirection, type Directed } from "./readingOrder";
 import { assertPage, latin1, pageSelection, streamBytes, withPage } from "./shared";
 
 const MAX_PIXELS = 48_000_000;
@@ -100,25 +101,22 @@ export function exportPageImage(ctx: EngineContext, page: number, dpi: number, f
 }
 
 /** lines from the text engine (with OCR results), or MuPDF's own reading when that is unavailable */
-function pageLines(ctx: EngineContext, page: number): Fragment[][] {
+function pageLines(ctx: EngineContext, page: number): Directed[] {
   let analysed: PageText | null = null;
   try {
     analysed = ocr.mergePageText(ctx, text.analyzePage(ctx, page));
   } catch {
     analysed = null;
   }
-  if (analysed) {
-    const level = analysed.lines.filter((l) => Math.abs(Math.sin(l.angle)) < 0.2 && Math.cos(l.angle) > 0);
-    const turned = analysed.lines.filter((l) => !level.includes(l));
-    return [level, turned];
-  }
+  if (analysed) return analysed.lines.map((l) => ({ text: l.text, dir: l.dir, quad: l.quad, angle: l.angle }));
   return withPage(ctx.doc, page, (p) => {
-    const lines: Fragment[] = [];
+    const lines: Directed[] = [];
     const stext = p.toStructuredText("preserve-whitespace");
-    let current: Fragment | null = null;
+    let current: Directed | null = null;
     stext.walk({
-      beginLine(bbox) {
-        current = { text: "", rect: bbox, dir: "ltr" };
+      beginLine(bbox, _wmode, direction) {
+        const angle = Math.atan2(direction[1], direction[0]);
+        current = { text: "", quad: rectToQuad(bbox), angle, dir: "ltr" };
       },
       onChar(c) {
         if (current) current.text += c;
@@ -132,16 +130,12 @@ function pageLines(ctx: EngineContext, page: number): Fragment[][] {
       },
     });
     stext.destroy();
-    return [lines];
+    return lines;
   });
 }
 
 export function exportText(ctx: EngineContext, pages?: number[]): string {
   return pageSelection(ctx.doc, pages)
-    .map((page) =>
-      pageLines(ctx, page)
-        .flatMap((group) => readingOrder(group.filter((l) => l.text.trim())))
-        .join("\n"),
-    )
+    .map((page) => orderByDirection(pageLines(ctx, page).filter((l) => l.text.trim())).join("\n"))
     .join("\n\n");
 }

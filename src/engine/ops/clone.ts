@@ -12,13 +12,22 @@ export function cloneDocument(ctx: EngineContext): MuPDF.PDFDocument {
   const count = source.countObjects();
   while (copy.countObjects() < count) copy.createObject();
 
+  // Only objects reachable from the trailer are read: resolving an unused number (there are some after an
+  // undo) makes MuPDF log errors.
+  const queue: number[] = [];
+  const found = new Set<number>();
+
   const convert = (value: MuPDF.PDFObject): unknown => {
-    if (value.isIndirect()) return copy.newIndirect(value.asIndirect());
-    if (value.isDictionary()) {
-      const out = copy.newDictionary();
-      value.forEach((v, k) => out.put(k, convert(v)));
-      return out;
+    if (value.isIndirect()) {
+      const number = value.asIndirect();
+      if (number <= 0 || number >= count) return copy.newNull();
+      if (!found.has(number)) {
+        found.add(number);
+        queue.push(number);
+      }
+      return copy.newIndirect(number);
     }
+    if (value.isDictionary()) return dictionary(value);
     if (value.isArray()) {
       const out = copy.newArray();
       value.forEach((v) => out.push(convert(v)));
@@ -31,27 +40,11 @@ export function cloneDocument(ctx: EngineContext): MuPDF.PDFDocument {
     if (value.isBoolean()) return copy.newBoolean(value.asBoolean());
     return copy.newNull();
   };
-
-  for (let number = 1; number < count; number++) {
-    const reference = source.newIndirect(number);
-    const target = copy.newIndirect(number);
-    try {
-      const value = reference.resolve();
-      if (reference.isStream()) {
-        const dict = copy.newDictionary();
-        value.forEach((v, k) => dict.put(k, convert(v)));
-        target.writeObject(dict);
-        target.writeRawStream(reference.readRawStream().asUint8Array().slice());
-      } else if (value.isDictionary()) {
-        const dict = copy.newDictionary();
-        value.forEach((v, k) => dict.put(k, convert(v)));
-        target.writeObject(dict);
-      } else target.writeObject(convert(value));
-    } catch {
-      // a broken object in a damaged file stays empty, as it already is for the viewer
-      target.writeObject(copy.newNull());
-    }
-  }
+  const dictionary = (value: MuPDF.PDFObject) => {
+    const out = copy.newDictionary();
+    value.forEach((v, k) => out.put(k, convert(v)));
+    return out;
+  };
 
   const trailer = source.getTrailer();
   const target = copy.getTrailer();
@@ -59,5 +52,24 @@ export function cloneDocument(ctx: EngineContext): MuPDF.PDFDocument {
     const value = trailer.get(key);
     if (!value.isNull()) target.put(key, convert(value));
   }
+
+  // the queue grows while it is being worked through
+  for (let i = 0; i < queue.length; i++) {
+    const number = queue[i]!;
+    const reference = source.newIndirect(number);
+    const object = copy.newIndirect(number);
+    try {
+      const value = reference.resolve();
+      if (reference.isStream()) {
+        object.writeObject(dictionary(value));
+        object.writeRawStream(reference.readRawStream().asUint8Array().slice());
+      } else object.writeObject(value.isDictionary() ? dictionary(value) : convert(value));
+    } catch {
+      // a broken object in a damaged file stays empty, as it already is for the viewer
+      object.writeObject(copy.newNull());
+    }
+  }
+  for (let number = 1; number < count; number++)
+    if (!found.has(number)) copy.newIndirect(number).writeObject(copy.newNull());
   return copy;
 }

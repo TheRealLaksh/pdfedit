@@ -1,5 +1,6 @@
 /** Arrange text lines in reading order: columns one after the other, table rows left to right. */
-import type { Rect } from "../types";
+import { rectFromPoints } from "../geom";
+import type { Point, Quad, Rect } from "../types";
 
 export interface Fragment {
   text: string;
@@ -66,4 +67,41 @@ export function readingOrder(items: Fragment[], depth = 0): string[] {
       })
       .join("");
   });
+}
+
+export interface Directed {
+  text: string;
+  quad: Quad;
+  /** baseline direction, radians, page space (y down) */
+  angle: number;
+  dir: "ltr" | "rtl";
+}
+
+/**
+ * Reading order for lines running in any direction: lines are grouped by direction, each group is turned
+ * level (so "top" means top for its reader) and ordered. The direction with most text comes first.
+ */
+export function orderByDirection(lines: Directed[]): string[] {
+  const groups: { angle: number; lines: Directed[]; size: number }[] = [];
+  for (const line of lines) {
+    const apart = (angle: number) => Math.abs(Math.atan2(Math.sin(line.angle - angle), Math.cos(line.angle - angle)));
+    let group = groups.find((g) => apart(g.angle) < 0.2);
+    if (!group) groups.push((group = { angle: line.angle, lines: [], size: 0 }));
+    group.lines.push(line);
+    group.size += line.text.length;
+  }
+  return groups
+    .sort((a, b) => b.size - a.size)
+    .flatMap(({ angle, lines: members }) => {
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
+      const level = (x: number, y: number): Point => [x * cos + y * sin, y * cos - x * sin];
+      return readingOrder(
+        members.map(({ text, dir, quad: q }) => ({
+          text,
+          dir,
+          rect: rectFromPoints([level(q[0], q[1]), level(q[2], q[3]), level(q[4], q[5]), level(q[6], q[7])]),
+        })),
+      );
+    });
 }
