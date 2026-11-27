@@ -54,17 +54,27 @@ Branch: `main` · remote: none
 
 ### Last 15 commits
 
+- `a7cf22a` 2026-11-27 21:13 docs: readme, module brief and handoff automation
 - `239e715` 2026-11-27 21:13 chore: project setup, tooling and AGPL licence
 
 ### Uncommitted changes at refresh time
 
 ```
-A  .claude/settings.json
-A  .githooks/pre-commit
-A  CLAUDE.md
-A  README.md
-A  docs/MODULES.md
-A  scripts/handoff.mjs
-?? src/
+A  src/engine/context.ts
+A  src/engine/geom.ts
+A  src/engine/types.ts
+?? src/App.tsx
+?? src/engine/client.ts
+?? src/engine/content/
+?? src/engine/engine.ts
+?? src/engine/fonts/
+?? src/engine/ocr/
+?? src/engine/ops/
+?? src/engine/text/
+?? src/engine/worker.ts
+?? src/main.tsx
+?? src/ocr/
+?? src/store/
+?? src/ui/
 ```
 <!-- handoff:auto:end -->
