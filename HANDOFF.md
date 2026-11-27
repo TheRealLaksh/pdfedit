@@ -24,6 +24,9 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 ## Status
 - 27 Nov 2026: scaffold and contracts done; module build by 7 parallel agents running.
 - FONTS landed: about 40 scripts shaped and embedded, 83 tests pass. Limits: no WOFF/CFF2, emoji monochrome.
+- OPS landed (127 tests) and SHELL landed (start screen, panels, PWA). Never `saveToBuffer` the live engine doc:
+  it corrupts undo (ops copies objects instead, `ops/clone.ts`).
+- SHELL not verified: real devices / iOS keyboard, touch drag-reorder, user-font upload, SW update across deploys.
 
 ## Next steps
 1. Build the 7 modules (TEXT, FONTS, OCR, OPS, VIEWER, SHELL, TESTS).
@@ -49,12 +52,13 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 <!-- handoff:auto:start -->
 ## Auto: repo state
 
-_Refreshed 27 Nov 2026, 9:50 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
+_Refreshed 27 Nov 2026, 9:51 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
 
 Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `08908b8` 2026-11-27 21:50 feat(shell): start screen, editor chrome, panels and dialogs
 - `942591c` 2026-11-27 21:50 feat(shell): design tokens, app icons and PWA assets
 - `8e1236b` 2026-11-27 21:50 fix(store): stay busy until overlapping calls all finish
 - `02ee33c` 2026-11-27 21:50 feat(ops): added objects, images, forms, page tools, redaction and export
@@ -70,37 +74,10 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 ### Uncommitted changes at refresh time
 
 ```
-M  src/App.tsx
+M  HANDOFF.md
  M src/engine/ocr/index.ts
  M src/engine/text/index.ts
  M src/ocr/index.ts
-A  src/ui/shell/Dialogs.tsx
-A  src/ui/shell/Feedback.tsx
-A  src/ui/shell/Logo.tsx
-A  src/ui/shell/Panel.tsx
-A  src/ui/shell/StartScreen.tsx
-A  src/ui/shell/ToolBars.tsx
-A  src/ui/shell/TopBar.tsx
-A  src/ui/shell/actions.ts
-A  src/ui/shell/controls.tsx
-A  src/ui/shell/hooks.ts
-A  src/ui/shell/panels/AboutPanel.tsx
-A  src/ui/shell/panels/ExportPanel.tsx
-A  src/ui/shell/panels/FindPanel.tsx
-A  src/ui/shell/panels/FontsPanel.tsx
-A  src/ui/shell/panels/FormsPanel.tsx
-A  src/ui/shell/panels/OcrPanel.tsx
-A  src/ui/shell/panels/PageScope.tsx
-A  src/ui/shell/panels/PagesPanel.tsx
-A  src/ui/shell/panels/SignaturePanel.tsx
-A  src/ui/shell/panels/StampPanel.tsx
-A  src/ui/shell/panels/signature.ts
-A  src/ui/shell/pwa.ts
-A  src/ui/shell/shell.css
-A  src/ui/shell/toolColors.ts
-A  src/ui/shell/tools.ts
-A  src/ui/shell/uiStore.ts
-A  src/ui/shell/util.ts
  M src/ui/viewer/Viewer.tsx
 ?? playwright.config.ts
 ?? src/engine/ocr/edit.ts
