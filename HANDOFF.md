@@ -55,12 +55,13 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 <!-- handoff:auto:start -->
 ## Auto: repo state
 
-_Refreshed 27 Nov 2026, 10:18 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
+_Refreshed 27 Nov 2026, 10:19 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
 
 Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `83b812e` 2026-11-27 22:18 test: integration and browser test suites
 - `07b5c8a` 2026-11-27 22:18 test: multi-language PDF corpus and Playwright config
 - `5d86f69` 2026-11-27 22:07 fix(shell): zoom buttons follow the viewer's real fit scale
 - `0be61f4` 2026-11-27 22:06 feat(viewer): virtualised pages, inline text editing and on-page tools
@@ -75,33 +76,14 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `2613fab` 2026-11-27 21:14 feat(app): shared store, design tokens and entry point
 - `34797a1` 2026-11-27 21:14 feat(engine): engine router, journal undo and worker bridge
 - `0b80a57` 2026-11-27 21:14 feat(engine): content stream tokenizer and page helpers
-- `dacf1be` 2026-11-27 21:14 feat(engine): contract, context and geometry helpers
 
 ### Uncommitted changes at refresh time
 
 ```
-M src/engine/ocr/index.ts
+M  src/engine/engine.ts
+ M src/engine/ocr/index.ts
  M src/engine/text/index.ts
  M src/ocr/index.ts
-A  tests/e2e/document.spec.ts
-A  tests/e2e/edit.spec.ts
-A  tests/e2e/helpers.ts
-A  tests/e2e/objects.spec.ts
-A  tests/e2e/ocr.spec.ts
-A  tests/e2e/open.spec.ts
-A  tests/e2e/pages.spec.ts
-A  tests/e2e/sign.spec.ts
-A  tests/e2e/ui.spec.ts
-A  tests/integration/corpus.test.ts
-A  tests/integration/documents.test.ts
-A  tests/integration/edit.test.ts
-A  tests/integration/extraction.test.ts
-A  tests/integration/find.test.ts
-A  tests/integration/forms.test.ts
-A  tests/integration/helpers.ts
-A  tests/integration/objects.test.ts
-A  tests/integration/ocr.test.ts
-A  tests/integration/pages.test.ts
 ?? src/engine/ocr/edit.ts
 ?? src/engine/ocr/fit.ts
 ?? src/engine/ocr/ink.ts

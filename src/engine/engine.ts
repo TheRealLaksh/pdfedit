@@ -178,7 +178,10 @@ export class Engine implements EngineAPI {
       doc: this.info(),
       changedPages: change.changedPages,
       warnings: change.warnings ?? [],
-      fallbackFonts: [...new Set(change.fallbackFonts ?? [])],
+      // internal names some producers give embedded fonts mean nothing to the user
+      fallbackFonts: [...new Set(change.fallbackFonts ?? [])].filter(
+        (n) => !/^(OTS-derived-font|CIDFont\+|[FT]\d+(_\d+)?$)/i.test(n),
+      ),
       canUndo: this.past.length > 0,
       canRedo: this.future.length > 0,
       createdId: change.createdId,
