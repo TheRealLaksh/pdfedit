@@ -151,14 +151,20 @@ export class Engine implements EngineAPI {
     } catch (e) {
       ctx.doc.abandonOperation();
       ctx.state = before;
-      ctx.cache.clear();
+      this.invalidate(ctx);
       throw e;
     }
     ctx.doc.endOperation();
-    ctx.cache.clear();
+    this.invalidate(ctx);
     this.past.push(before);
     this.future = [];
     return this.result(change);
+  }
+
+  /** MuPDF keeps parsed fonts and images in a store and does not notice changed objects: drop it. */
+  private invalidate(ctx: EngineContext): void {
+    ctx.cache.clear();
+    mupdf.emptyStore();
   }
 
   private result(change: ModuleChange): MutationResult {
@@ -189,7 +195,7 @@ export class Engine implements EngineAPI {
     this.future.push(structuredClone(ctx.state));
     ctx.doc.undo();
     ctx.state = previous;
-    ctx.cache.clear();
+    this.invalidate(ctx);
     return this.result({ changedPages: this.allPages() });
   }
 
@@ -200,7 +206,7 @@ export class Engine implements EngineAPI {
     this.past.push(structuredClone(ctx.state));
     ctx.doc.redo();
     ctx.state = next;
-    ctx.cache.clear();
+    this.invalidate(ctx);
     return this.result({ changedPages: this.allPages() });
   }
 

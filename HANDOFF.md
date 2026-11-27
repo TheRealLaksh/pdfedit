@@ -55,6 +55,7 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `fda0c3d` 2026-11-27 21:49 feat(fonts): font catalog, HarfBuzz shaping and embedding for all scripts
 - `2613fab` 2026-11-27 21:14 feat(app): shared store, design tokens and entry point
 - `34797a1` 2026-11-27 21:14 feat(engine): engine router, journal undo and worker bridge
 - `0b80a57` 2026-11-27 21:14 feat(engine): content stream tokenizer and page helpers
@@ -65,38 +66,15 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 ### Uncommitted changes at refresh time
 
 ```
-M  HANDOFF.md
- M index.html
+M index.html
  M src/App.tsx
- M src/engine/engine.ts
-A  src/engine/fonts/bidi-js.d.ts
-A  src/engine/fonts/catalog.data.ts
-A  src/engine/fonts/catalog.ts
-A  src/engine/fonts/draw.ts
-A  src/engine/fonts/embed.ts
-A  src/engine/fonts/face.ts
-A  src/engine/fonts/hb.ts
-M  src/engine/fonts/index.ts
-A  src/engine/fonts/inspect.ts
-A  src/engine/fonts/layout.ts
-A  src/engine/fonts/resolve.ts
-A  src/engine/fonts/scripts.ts
-A  src/engine/fonts/sfnt.ts
-A  src/engine/fonts/user.ts
+M  src/engine/engine.ts
  M src/engine/ocr/index.ts
  M src/engine/ops/index.ts
  M src/engine/text/index.ts
  M src/ocr/index.ts
  M src/ui/tokens.css
  M src/ui/viewer/Viewer.tsx
-A  tests/fonts/catalog.test.ts
-A  tests/fonts/chromium.ts
-A  tests/fonts/fonts.test.ts
-A  tests/fonts/helpers.ts
-A  tests/fonts/logical.ts
-A  tests/fonts/nodeAssets.ts
-A  tests/fonts/samples.ts
-A  tests/fonts/scripts.test.ts
 ?? playwright.config.ts
 ?? public/icon.svg
 ?? public/icons/
