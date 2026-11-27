@@ -55,6 +55,7 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `942591c` 2026-11-27 21:50 feat(shell): design tokens, app icons and PWA assets
 - `8e1236b` 2026-11-27 21:50 fix(store): stay busy until overlapping calls all finish
 - `02ee33c` 2026-11-27 21:50 feat(ops): added objects, images, forms, page tools, redaction and export
 - `9c783bf` 2026-11-27 21:49 fix(engine): drop MuPDF's font cache after every mutation, undo and redo
@@ -69,21 +70,37 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 ### Uncommitted changes at refresh time
 
 ```
-M  index.html
-A  public/icon.svg
-A  public/icons/apple-touch-icon.png
-A  public/icons/icon-192.png
-A  public/icons/icon-512.png
-A  public/icons/maskable-512.png
-A  public/manifest.webmanifest
-A  public/robots.txt
-A  public/sw.js
-A  public/theme.js
- M src/App.tsx
+M  src/App.tsx
  M src/engine/ocr/index.ts
  M src/engine/text/index.ts
  M src/ocr/index.ts
-M  src/ui/tokens.css
+A  src/ui/shell/Dialogs.tsx
+A  src/ui/shell/Feedback.tsx
+A  src/ui/shell/Logo.tsx
+A  src/ui/shell/Panel.tsx
+A  src/ui/shell/StartScreen.tsx
+A  src/ui/shell/ToolBars.tsx
+A  src/ui/shell/TopBar.tsx
+A  src/ui/shell/actions.ts
+A  src/ui/shell/controls.tsx
+A  src/ui/shell/hooks.ts
+A  src/ui/shell/panels/AboutPanel.tsx
+A  src/ui/shell/panels/ExportPanel.tsx
+A  src/ui/shell/panels/FindPanel.tsx
+A  src/ui/shell/panels/FontsPanel.tsx
+A  src/ui/shell/panels/FormsPanel.tsx
+A  src/ui/shell/panels/OcrPanel.tsx
+A  src/ui/shell/panels/PageScope.tsx
+A  src/ui/shell/panels/PagesPanel.tsx
+A  src/ui/shell/panels/SignaturePanel.tsx
+A  src/ui/shell/panels/StampPanel.tsx
+A  src/ui/shell/panels/signature.ts
+A  src/ui/shell/pwa.ts
+A  src/ui/shell/shell.css
+A  src/ui/shell/toolColors.ts
+A  src/ui/shell/tools.ts
+A  src/ui/shell/uiStore.ts
+A  src/ui/shell/util.ts
  M src/ui/viewer/Viewer.tsx
 ?? playwright.config.ts
 ?? src/engine/ocr/edit.ts
@@ -114,7 +131,6 @@ M  src/ui/tokens.css
 ?? src/ocr/languages.ts
 ?? src/ocr/preprocess.ts
 ?? src/ocr/tess.ts
-?? src/ui/shell/
 ?? src/ui/viewer/Overlays.tsx
 ?? src/ui/viewer/PageCanvas.tsx
 ?? src/ui/viewer/PageView.tsx

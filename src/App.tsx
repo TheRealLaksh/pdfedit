@@ -1,6 +1,176 @@
 /** App shell. Owner: SHELL module. */
+import { useEffect, useLayoutEffect } from "react";
+import { useStore } from "./store";
+import { downloadWhenReady, dropOnDocument, openAnother } from "./ui/shell/actions";
+import { Dialogs } from "./ui/shell/Dialogs";
+import { BusyOverlay, DropTarget, StatusChips, Toasts } from "./ui/shell/Feedback";
+import { useDesktop, useViewportVars } from "./ui/shell/hooks";
+import { Panel } from "./ui/shell/Panel";
+import { registerServiceWorker } from "./ui/shell/pwa";
+import { StartScreen } from "./ui/shell/StartScreen";
+import { useToolColors } from "./ui/shell/toolColors";
+import { BottomBar, MoreMenu, ToolOptions, ToolRail } from "./ui/shell/ToolBars";
+import { togglePanel, TopBar } from "./ui/shell/TopBar";
+import { useShell } from "./ui/shell/uiStore";
 import { Viewer } from "./ui/viewer/Viewer";
+import "./ui/shell/shell.css";
+
+function useTheme() {
+  const theme = useStore((s) => s.theme);
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    if (theme === "system") root.removeAttribute("data-theme");
+    else root.setAttribute("data-theme", theme);
+    // the browser toolbar follows a forced theme too
+    const forced = theme === "system" ? "" : getComputedStyle(root).getPropertyValue("--surface").trim();
+    for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) {
+      meta.dataset.system ??= meta.content;
+      meta.content = forced || meta.dataset.system;
+    }
+  }, [theme]);
+}
+
+/** file level shortcuts; editing shortcuts (undo, zoom, nudge) belong to the viewer */
+function useShortcuts() {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
+      const key = e.key.toLowerCase();
+      if (key !== "o" && key !== "s" && key !== "f") return;
+      const state = useStore.getState();
+      const shell = useShell.getState();
+      if (key === "f" && !state.doc) return;
+      e.preventDefault();
+      if (state.passwordPrompt || shell.confirm || shell.prompt) return;
+      if (key === "f") {
+        if (state.panel === "find") document.querySelector<HTMLInputElement>('input[name="find"]')?.select();
+        else togglePanel("find");
+        return;
+      }
+      // an open text field commits before the file is saved or replaced
+      (document.activeElement as HTMLElement | null)?.blur?.();
+      // opening needs the key press itself (file pickers refuse to appear later), saving can wait
+      if (key === "s") void downloadWhenReady();
+      else if (!state.busy) void openAnother();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+}
+
+function useUnsavedWarning() {
+  const unsaved = useStore((s) => s.doc !== null && (s.dirty || s.editing !== null));
+  useEffect(() => {
+    if (!unsaved) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [unsaved]);
+}
+
+/**
+ * Adds one history entry while a sheet is open on a phone, so the back gesture closes the sheet
+ * instead of leaving the page. Closing it any other way removes the entry again.
+ */
+function useBackToClose(active: boolean) {
+  useEffect(() => {
+    if (!active) return;
+    if (!history.state?.pdfeditSheet) history.pushState({ pdfeditSheet: true }, "");
+    const onPop = () => {
+      useShell.getState().setMenu(false);
+      useStore.getState().openPanel(null);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      // deferred: switching from the menu to a panel keeps the same entry
+      setTimeout(() => {
+        const open = useStore.getState().panel !== null || useShell.getState().menuOpen;
+        if (!open && history.state?.pdfeditSheet) history.back();
+      }, 0);
+    };
+  }, [active]);
+}
+
+function Editor({ desktop }: { desktop: boolean }) {
+  const editing = useStore((s) => s.editing !== null);
+  const placing = useStore((s) => s.placement !== null);
+  // the viewer shows its own bar for a selected item
+  const selected = useStore((s) => s.selection !== null);
+  const panel = useStore((s) => s.panel);
+  const fileName = useStore((s) => s.doc!.fileName);
+  const menuOpen = useShell((s) => s.menuOpen);
+
+  useEffect(() => {
+    const before = document.title;
+    document.title = `${fileName} · PDFEdit`;
+    return () => {
+      document.title = before;
+    };
+  }, [fileName]);
+
+  return (
+    <div className="sh-app" data-layout={desktop ? "desktop" : "phone"}>
+      <a className="sh-skip" href="#sh-document">
+        Skip to document
+      </a>
+      <TopBar desktop={desktop} />
+      <div className="sh-body">
+        {desktop && <ToolRail />}
+        <main className="sh-main" id="sh-document" tabIndex={-1}>
+          <div className="sh-viewer">
+            <Viewer />
+          </div>
+          <StatusChips />
+          {!editing && !placing && !selected && (desktop || !panel) && <ToolOptions />}
+        </main>
+        <Panel desktop={desktop} />
+      </div>
+      {!desktop && !editing && <BottomBar />}
+      {menuOpen && <MoreMenu desktop={desktop} />}
+    </div>
+  );
+}
 
 export function App() {
-  return <Viewer />;
+  const hasDoc = useStore((s) => s.doc !== null);
+  const openFiles = useStore((s) => s.openFiles);
+  const panelOpen = useStore((s) => s.panel !== null);
+  const menuOpen = useShell((s) => s.menuOpen);
+  const desktop = useDesktop();
+  useTheme();
+  useViewportVars();
+  useShortcuts();
+  useUnsavedWarning();
+  useToolColors();
+  useBackToClose(!desktop && (panelOpen || menuOpen));
+  useEffect(() => registerServiceWorker(), []);
+
+  useEffect(() => {
+    document.documentElement.toggleAttribute("data-editor", hasDoc);
+    if (!hasDoc) useShell.getState().setMenu(false);
+  }, [hasDoc]);
+
+  return (
+    <>
+      {hasDoc ? (
+        <Editor desktop={desktop} />
+      ) : (
+        <>
+          <StartScreen />
+          <Panel desktop={desktop} />
+        </>
+      )}
+      <DropTarget
+        label={hasDoc ? "Drop to add or open" : "Drop a PDF or images"}
+        onFiles={(files) => void (hasDoc ? dropOnDocument(files) : openFiles(files))}
+      />
+      <Dialogs />
+      <BusyOverlay />
+      <Toasts />
+    </>
+  );
 }
