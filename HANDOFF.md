@@ -27,6 +27,9 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 - OPS landed (127 tests) and SHELL landed (start screen, panels, PWA). Never `saveToBuffer` the live engine doc:
   it corrupts undo (ops copies objects instead, `ops/clone.ts`).
 - SHELL not verified: real devices / iOS keyboard, touch drag-reorder, user-font upload, SW update across deploys.
+- VIEWER landed, checked in Chromium and WebKit emulation; no real-device keyboard test, no unit tests.
+  Wanted: one-step undo for multi-line highlight / multi-page redaction; undo while typing drops the draft;
+  friendlier substitute font names ("OTS-derived-font" shown for Chinese).
 
 ## Next steps
 1. Build the 7 modules (TEXT, FONTS, OCR, OPS, VIEWER, SHELL, TESTS).
@@ -52,12 +55,13 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 <!-- handoff:auto:start -->
 ## Auto: repo state
 
-_Refreshed 27 Nov 2026, 10:06 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
+_Refreshed 27 Nov 2026, 10:07 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
 
 Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `0be61f4` 2026-11-27 22:06 feat(viewer): virtualised pages, inline text editing and on-page tools
 - `41db324` 2026-11-27 22:06 fix(engine): hold calls until the worker has loaded so an early open cannot hang
 - `c562164` 2026-11-27 21:51 docs: handoff status for operations and shell
 - `08908b8` 2026-11-27 21:50 feat(shell): start screen, editor chrome, panels and dialogs
@@ -76,36 +80,11 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 ### Uncommitted changes at refresh time
 
 ```
-M src/engine/ocr/index.ts
+M  HANDOFF.md
+ M src/engine/ocr/index.ts
  M src/engine/text/index.ts
  M src/ocr/index.ts
-A  src/ui/viewer/Overlays.tsx
-A  src/ui/viewer/PageCanvas.tsx
-A  src/ui/viewer/PageView.tsx
-M  src/ui/viewer/Viewer.tsx
-A  src/ui/viewer/canvasRegistry.ts
-A  src/ui/viewer/context.ts
-A  src/ui/viewer/device.ts
-A  src/ui/viewer/editor/Dock.tsx
-A  src/ui/viewer/editor/Preview.tsx
-A  src/ui/viewer/editor/StyleBar.tsx
-A  src/ui/viewer/editor/TextEditor.tsx
-A  src/ui/viewer/editor/controller.ts
-A  src/ui/viewer/editor/textMetrics.ts
-A  src/ui/viewer/geometry.ts
-A  src/ui/viewer/layers/DrawLayer.tsx
-A  src/ui/viewer/layers/EditTextLayer.tsx
-A  src/ui/viewer/layers/PlaceLayer.tsx
-A  src/ui/viewer/layers/RedactionLayer.tsx
-A  src/ui/viewer/layers/SelectLayer.tsx
-A  src/ui/viewer/layers/StaticLayers.tsx
-A  src/ui/viewer/layers/pointer.ts
-A  src/ui/viewer/pageData.ts
-A  src/ui/viewer/renderQueue.ts
-A  src/ui/viewer/useViewport.ts
-A  src/ui/viewer/viewer.css
-A  src/ui/viewer/viewerApi.ts
-A  src/ui/viewer/viewerStore.ts
+M  src/ui/shell/TopBar.tsx
 ?? playwright.config.ts
 ?? src/engine/ocr/edit.ts
 ?? src/engine/ocr/fit.ts

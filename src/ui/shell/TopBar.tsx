@@ -4,8 +4,8 @@ import {
   House, ListChecks, MagnifyingGlass, MagnifyingGlassMinus, MagnifyingGlassPlus, SquaresFour,
 } from "@phosphor-icons/react";
 import { useState, type FormEvent } from "react";
-import type { DocInfo } from "../../engine/types";
 import { useStore, type PanelId } from "../../store";
+import { zoomBy } from "../viewer/viewerApi";
 import { closeDocument, downloadWhenReady } from "./actions";
 import { Button, IconButton } from "./controls";
 import { Logo } from "./Logo";
@@ -17,26 +17,16 @@ export function togglePanel(panel: PanelId): void {
   state.openPanel(state.panel === panel ? null : panel);
 }
 
-/** CSS pixels per point that "fit width" currently stands for (close enough to step from) */
-function fitScale(doc: DocInfo, page: number): number {
-  const width = document.querySelector(".sh-viewer")?.clientWidth ?? window.innerWidth;
-  return Math.max(0.2, (width - 32) / (doc.pages[page]?.width || 612));
-}
-
 export function useZoom() {
   const zoom = useStore((s) => s.zoom);
   const setZoom = useStore((s) => s.setZoom);
-  const step = (factor: number) => {
-    const { doc, currentPage, zoom } = useStore.getState();
-    if (!doc) return;
-    setZoom((zoom === "fit" ? fitScale(doc, currentPage) : zoom) * factor);
-  };
   return {
     zoom,
     // 100% = actual size (96 CSS px per inch)
     label: zoom === "fit" ? "Fit" : `${Math.round(zoom * 75)}%`,
-    zoomIn: () => step(1.25),
-    zoomOut: () => step(0.8),
+    // the viewer knows the real fit scale and keeps the centre of the view still
+    zoomIn: () => zoomBy(1.25),
+    zoomOut: () => zoomBy(0.8),
     toggleFit: () => setZoom(zoom === "fit" ? 96 / 72 : "fit"),
   };
 }
