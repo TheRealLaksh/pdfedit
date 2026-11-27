@@ -5,7 +5,7 @@ Free, public, no-login PDF editor that edits existing text in any language while
 the browser. For Laksh (owner) and anyone on the web. Phone use matters most, desktop equally polished.
 
 ## Links
-- Live (target): https://pdfedit.lakshpradhwani.com (Cloudflare Pages project `pdfedit`)
+- Live: https://pdfedit.lakshpradhwani.com (Cloudflare Pages project `pdfedit`)
 - Repo: https://github.com/TheRealLaksh/pdfedit (public, AGPL-3.0)
 - Local: `C:\dev\pdfedit`
 - Build brief: `docs/MODULES.md`
@@ -76,6 +76,7 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `622a699` 2026-11-28 00:13 docs: handoff for the live release
 - `1969f44` 2026-11-28 00:02 fix(deploy): stop Cloudflare injecting scripts into the page without losing compression
 - `fa2f5dd` 2026-11-27 23:48 chore: deploy with wrangler through npx
 - `052057d` 2026-11-27 23:41 fix(text): spacing, layered and mixed-style fidelity, readable re-extraction and long lines
@@ -90,7 +91,6 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `011c3a4` 2026-11-27 23:06 fix(phone): landscape and 320px editor layout, dark swatches and safer service worker updates
 - `e3f850d` 2026-11-27 22:42 docs: record Cloudflare Pages project and domain
 - `c2c020b` 2026-11-27 22:37 fix(engine): record an undo step only when the document changed
-- `e6302e6` 2026-11-27 22:37 feat(ocr): in-browser recognition and native-looking edits on scanned pages
 
 ### Uncommitted changes at refresh time
 
