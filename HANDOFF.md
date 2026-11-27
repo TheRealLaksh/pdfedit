@@ -61,6 +61,7 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `07b5c8a` 2026-11-27 22:18 test: multi-language PDF corpus and Playwright config
 - `5d86f69` 2026-11-27 22:07 fix(shell): zoom buttons follow the viewer's real fit scale
 - `0be61f4` 2026-11-27 22:06 feat(viewer): virtualised pages, inline text editing and on-page tools
 - `41db324` 2026-11-27 22:06 fix(engine): hold calls until the worker has loaded so an early open cannot hang
@@ -75,91 +76,32 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `34797a1` 2026-11-27 21:14 feat(engine): engine router, journal undo and worker bridge
 - `0b80a57` 2026-11-27 21:14 feat(engine): content stream tokenizer and page helpers
 - `dacf1be` 2026-11-27 21:14 feat(engine): contract, context and geometry helpers
-- `a7cf22a` 2026-11-27 21:13 docs: readme, module brief and handoff automation
 
 ### Uncommitted changes at refresh time
 
 ```
-A  playwright.config.ts
- M src/engine/ocr/index.ts
+M src/engine/ocr/index.ts
  M src/engine/text/index.ts
  M src/ocr/index.ts
-A  tests/fixtures/NOTICE.md
-A  tests/fixtures/assets/FixtureSerif.ttf
-A  tests/fixtures/assets/photo-page.jpg
-A  tests/fixtures/assets/photo.jpg
-A  tests/fixtures/assets/photo.png
-A  tests/fixtures/assets/signature.png
-A  tests/fixtures/gen/chromium_docs.py
-A  tests/fixtures/gen/common.py
-A  tests/fixtures/gen/content.py
-A  tests/fixtures/gen/derived_docs.py
-A  tests/fixtures/gen/fonts.py
-A  tests/fixtures/gen/generate.py
-A  tests/fixtures/gen/raw_docs.py
-A  tests/fixtures/gen/rawpdf.py
-A  tests/fixtures/gen/reportlab_docs.py
-A  tests/fixtures/pdfs/ar-chromium.pdf
-A  tests/fixtures/pdfs/ar-type3.pdf
-A  tests/fixtures/pdfs/bn-chromium.pdf
-A  tests/fixtures/pdfs/bn-type3.pdf
-A  tests/fixtures/pdfs/broken-no-tounicode.pdf
-A  tests/fixtures/pdfs/broken-pua.pdf
-A  tests/fixtures/pdfs/columns-table.pdf
-A  tests/fixtures/pdfs/damaged-truncated.pdf
-A  tests/fixtures/pdfs/damaged-xref.pdf
-A  tests/fixtures/pdfs/el-chromium.pdf
-A  tests/fixtures/pdfs/empty-page.pdf
-A  tests/fixtures/pdfs/en-cff.pdf
-A  tests/fixtures/pdfs/en-chromium.pdf
-A  tests/fixtures/pdfs/en-justified.pdf
-A  tests/fixtures/pdfs/en-standard14.pdf
-A  tests/fixtures/pdfs/en-truetype.pdf
-A  tests/fixtures/pdfs/forms.pdf
-A  tests/fixtures/pdfs/gu-chromium.pdf
-A  tests/fixtures/pdfs/he-chromium.pdf
-A  tests/fixtures/pdfs/hi-chromium.pdf
-A  tests/fixtures/pdfs/hi-type3.pdf
-A  tests/fixtures/pdfs/images.pdf
-A  tests/fixtures/pdfs/ja-chromium.pdf
-A  tests/fixtures/pdfs/ja-vertical-chromium.pdf
-A  tests/fixtures/pdfs/justified-chromium.pdf
-A  tests/fixtures/pdfs/kn-chromium.pdf
-A  tests/fixtures/pdfs/ko-chromium.pdf
-A  tests/fixtures/pdfs/legacy-krutidev.pdf
-A  tests/fixtures/pdfs/manifest.json
-A  tests/fixtures/pdfs/mixed-chromium.pdf
-A  tests/fixtures/pdfs/ml-chromium.pdf
-A  tests/fixtures/pdfs/mr-chromium.pdf
-A  tests/fixtures/pdfs/multipage.pdf
-A  tests/fixtures/pdfs/offset-cropbox.pdf
-A  tests/fixtures/pdfs/or-chromium.pdf
-A  tests/fixtures/pdfs/owner-only.pdf
-A  tests/fixtures/pdfs/pa-chromium.pdf
-A  tests/fixtures/pdfs/password-aes256.pdf
-A  tests/fixtures/pdfs/password-rc4.pdf
-A  tests/fixtures/pdfs/positioning.pdf
-A  tests/fixtures/pdfs/rotated-pages.pdf
-A  tests/fixtures/pdfs/rotated-text.pdf
-A  tests/fixtures/pdfs/ru-chromium.pdf
-A  tests/fixtures/pdfs/scan-ar.pdf
-A  tests/fixtures/pdfs/scan-en.pdf
-A  tests/fixtures/pdfs/scan-hi.pdf
-A  tests/fixtures/pdfs/scan-ru.pdf
-A  tests/fixtures/pdfs/scan-searchable-en.pdf
-A  tests/fixtures/pdfs/scan-ta.pdf
-A  tests/fixtures/pdfs/scan-zh.pdf
-A  tests/fixtures/pdfs/shared-content.pdf
-A  tests/fixtures/pdfs/signed-simulated.pdf
-A  tests/fixtures/pdfs/story-multiscript.pdf
-A  tests/fixtures/pdfs/ta-chromium.pdf
-A  tests/fixtures/pdfs/table-chromium.pdf
-A  tests/fixtures/pdfs/te-chromium.pdf
-A  tests/fixtures/pdfs/th-chromium.pdf
-A  tests/fixtures/pdfs/type3-latin.pdf
-A  tests/fixtures/pdfs/ur-chromium.pdf
-A  tests/fixtures/pdfs/xobject-shared.pdf
-A  tests/fixtures/pdfs/zh-chromium.pdf
+A  tests/e2e/document.spec.ts
+A  tests/e2e/edit.spec.ts
+A  tests/e2e/helpers.ts
+A  tests/e2e/objects.spec.ts
+A  tests/e2e/ocr.spec.ts
+A  tests/e2e/open.spec.ts
+A  tests/e2e/pages.spec.ts
+A  tests/e2e/sign.spec.ts
+A  tests/e2e/ui.spec.ts
+A  tests/integration/corpus.test.ts
+A  tests/integration/documents.test.ts
+A  tests/integration/edit.test.ts
+A  tests/integration/extraction.test.ts
+A  tests/integration/find.test.ts
+A  tests/integration/forms.test.ts
+A  tests/integration/helpers.ts
+A  tests/integration/objects.test.ts
+A  tests/integration/ocr.test.ts
+A  tests/integration/pages.test.ts
 ?? src/engine/ocr/edit.ts
 ?? src/engine/ocr/fit.ts
 ?? src/engine/ocr/ink.ts
@@ -188,8 +130,6 @@ A  tests/fixtures/pdfs/zh-chromium.pdf
 ?? src/ocr/languages.ts
 ?? src/ocr/preprocess.ts
 ?? src/ocr/tess.ts
-?? tests/e2e/
-?? tests/integration/
 ?? tests/ocr/
 ?? tests/text/
 ```
