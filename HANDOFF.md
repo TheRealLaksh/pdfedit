@@ -71,6 +71,7 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `b4aaf22` 2026-11-27 23:28 fix(engine): restart a crashed or hung worker and replay the document
 - `011c3a4` 2026-11-27 23:06 fix(phone): landscape and 320px editor layout, dark swatches and safer service worker updates
 - `e3f850d` 2026-11-27 22:42 docs: record Cloudflare Pages project and domain
 - `c2c020b` 2026-11-27 22:37 fix(engine): record an undo step only when the document changed
@@ -85,16 +86,13 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `5d86f69` 2026-11-27 22:07 fix(shell): zoom buttons follow the viewer's real fit scale
 - `0be61f4` 2026-11-27 22:06 feat(viewer): virtualised pages, inline text editing and on-page tools
 - `41db324` 2026-11-27 22:06 fix(engine): hold calls until the worker has loaded so an early open cannot hang
-- `c562164` 2026-11-27 21:51 docs: handoff status for operations and shell
 
 ### Uncommitted changes at refresh time
 
 ```
 M public/_headers
  M src/App.tsx
-M  src/engine/client.ts
- M src/engine/content/tokenizer.ts
-M  src/engine/engine.ts
+M  src/engine/content/tokenizer.ts
  M src/engine/fonts/draw.ts
  M src/engine/fonts/index.ts
  M src/engine/fonts/inspect.ts
@@ -111,8 +109,6 @@ M  src/engine/engine.ts
  M src/engine/text/layout.ts
  M src/engine/text/pdffont.ts
  M src/engine/text/rewrite.ts
-M  src/engine/types.ts
-M  src/engine/worker.ts
  M src/ocr/index.ts
  M src/ocr/tess.ts
  M src/store/index.ts
@@ -127,13 +123,13 @@ M  src/engine/worker.ts
  M src/ui/viewer/layers/PlaceLayer.tsx
  M src/ui/viewer/layers/SelectLayer.tsx
  M src/ui/viewer/pageData.ts
+A  tests/integration/tokenizer.test.ts
  M tests/text/mockFonts.ts
 ?? src/engine/ops/guard.ts
 ?? src/ui/shell/backGuard.ts
 ?? tests/e2e/back.spec.ts
 ?? tests/e2e/desktop.spec.ts
 ?? tests/integration/robustness.test.ts
-?? tests/integration/tokenizer.test.ts
 ?? tests/ocr/pin.test.ts
 ?? tests/ops/listbox.test.ts
 ?? tests/text/fidelity.test.ts

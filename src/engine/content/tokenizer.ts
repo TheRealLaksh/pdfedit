@@ -108,6 +108,9 @@ export function parseContent(bytes: Uint8Array): Operation[] {
     return out;
   };
 
+  /** arrays and dictionaries nested deeper than this are flattened, so hostile files cannot overflow */
+  let nest = 0;
+
   /** returns an operand, or an operator keyword as a string, or null for stray delimiters */
   const readToken = (): Operand | string | null => {
     const c = bytes[i]!;
@@ -116,6 +119,8 @@ export function parseContent(bytes: Uint8Array): Operation[] {
     if (c === 60) {
       if (bytes[i + 1] === 60) {
         i += 2;
+        if (nest >= 100) return null;
+        nest++;
         const dict: Record<string, Operand> = {};
         for (;;) {
           skip();
@@ -130,12 +135,15 @@ export function parseContent(bytes: Uint8Array): Operation[] {
           const v = readToken();
           if (v && typeof v !== "string") dict[k.value] = v;
         }
+        nest--;
         return { type: "dict", value: dict };
       }
       return { type: "string", value: readHex(), hex: true };
     }
     if (c === 91) {
       i++;
+      if (nest >= 100) return null;
+      nest++;
       const arr: Operand[] = [];
       for (;;) {
         skip();
@@ -147,6 +155,7 @@ export function parseContent(bytes: Uint8Array): Operation[] {
         const v = readToken();
         if (v && typeof v !== "string") arr.push(v);
       }
+      nest--;
       return { type: "array", value: arr };
     }
     if (isDelim(c)) {
