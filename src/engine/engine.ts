@@ -53,7 +53,9 @@ export class Engine implements EngineAPI {
   async createFromImages(images: Uint8Array[], fileName: string): Promise<OpenResult> {
     const pdf = new mupdf.PDFDocument();
     this.adopt(pdf, fileName, false);
+    pdf.beginOperation("Create from images");
     await ops.insertImagesAsPages(this.context, images, 0);
+    pdf.endOperation();
     // creating the document is not an undoable step
     return this.adopt(new mupdf.PDFDocument(pdf.saveToBuffer("").asUint8Array().slice()), fileName, false);
   }

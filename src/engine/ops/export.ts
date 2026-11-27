@@ -1,0 +1,147 @@
+/** Saving the document, page images and plain text. */
+import type * as MuPDF from "mupdf";
+import type { EngineContext } from "../context";
+import { encodeLatin1 } from "../content/tokenizer";
+import * as ocr from "../ocr";
+import * as text from "../text";
+import type { ExportOptions, PageText, Rect } from "../types";
+import { ensureAppearances } from "./forms";
+import { cloneDocument } from "./clone";
+import { discardPages, pageRefs } from "./pages";
+import { readingOrder, type Fragment } from "./readingOrder";
+import { assertPage, latin1, pageSelection, streamBytes, withPage } from "./shared";
+
+const MAX_PIXELS = 48_000_000;
+
+export async function exportPdf(ctx: EngineContext, options: ExportOptions = {}): Promise<Uint8Array> {
+  const password = options.password;
+  if (password !== undefined && password !== "" && new TextEncoder().encode(password).length > 127)
+    throw new Error("The password is too long (127 bytes at most)");
+  if (options.pages) {
+    if (!options.pages.length) throw new Error("No pages selected");
+    options.pages.forEach((p) => assertPage(ctx.doc, p));
+  }
+
+  // all work happens on a copy: the open document is never touched by exporting
+  const clone = cloneDocument(ctx);
+  try {
+    if (options.pages) {
+      const refs = pageRefs(clone);
+      discardPages(clone, [...new Set(options.pages)].map((p) => refs[p]!));
+    }
+    if (options.flatten) {
+      await ensureAppearances({ ...ctx, doc: clone, cache: new Map(), state: structuredClone(ctx.state) }, clone);
+      clone.bake(true, true);
+    }
+    if (options.compress) {
+      try {
+        clone.subsetFonts();
+      } catch {
+        /* an unusual font stays complete */
+      }
+    }
+    stampModified(clone, new Date());
+    // garbage collection is not optional: removed and redacted content must not stay in the file.
+    // ("deduplicate" is not used: MuPDF can merge streams that differ, which blanks content.)
+    const settings: Record<string, string> = {
+      garbage: "compact",
+      compress: "yes",
+      "compress-images": "yes",
+      "compress-fonts": "yes",
+      encrypt: password ? "aes-256" : "none",
+    };
+    if (options.compress) settings.objstms = "yes";
+    if (password) {
+      settings["user-password"] = password;
+      settings["owner-password"] = password;
+    }
+    return clone.saveToBuffer(settings).asUint8Array().slice();
+  } finally {
+    clone.destroy();
+  }
+}
+
+/** say truthfully when the file was last changed, in both metadata places */
+function stampModified(doc: MuPDF.PDFDocument, now: Date) {
+  const two = (n: number) => String(Math.floor(Math.abs(n))).padStart(2, "0");
+  const offset = -now.getTimezoneOffset();
+  const sign = offset >= 0 ? "+" : "-";
+  const date = `${now.getFullYear()}-${two(now.getMonth() + 1)}-${two(now.getDate())}`;
+  const time = `${two(now.getHours())}:${two(now.getMinutes())}:${two(now.getSeconds())}`;
+  const zone = `${sign}${two(offset / 60)}`;
+  const minutes = two(offset % 60);
+  doc.setMetaData("info:ModDate", `D:${date.replaceAll("-", "")}${time.replaceAll(":", "")}${zone}'${minutes}'`);
+
+  const xmp = doc.getTrailer().get("Root", "Metadata");
+  if (!xmp.isStream()) return;
+  const iso = `${date}T${time}${zone}:${minutes}`;
+  // the stream is UTF-8; working on its bytes keeps everything else exactly as it is
+  const before = latin1(streamBytes(xmp));
+  const after = before.replace(
+    /(<(xmp|xap):(ModifyDate|MetadataDate)>)[^<]*(<\/)|(\b(?:xmp|xap):(?:ModifyDate|MetadataDate)=(["']))[^"']*(\6)/g,
+    (match, open, _p, _k, close, attribute, _q, end) => (open ? `${open}${iso}${close}` : `${attribute}${iso}${end}`),
+  );
+  if (after !== before) xmp.writeStream(encodeLatin1(after));
+}
+
+export function exportPageImage(ctx: EngineContext, page: number, dpi: number, format: "png" | "jpeg"): Uint8Array {
+  return withPage(ctx.doc, page, (p) => {
+    const [x0, y0, x1, y1] = p.getBounds() as Rect;
+    let scale = Math.max(8, Math.min(1200, dpi || 150)) / 72;
+    scale = Math.min(scale, Math.sqrt(MAX_PIXELS / Math.max(1, (x1 - x0) * (y1 - y0))));
+    const pixmap = p.toPixmap([scale, 0, 0, scale, 0, 0], ctx.mupdf.ColorSpace.DeviceRGB, false, true);
+    try {
+      pixmap.setResolution(Math.round(scale * 72), Math.round(scale * 72));
+      return (format === "jpeg" ? pixmap.asJPEG(92, false) : pixmap.asPNG()).slice();
+    } finally {
+      pixmap.destroy();
+    }
+  });
+}
+
+/** lines from the text engine (with OCR results), or MuPDF's own reading when that is unavailable */
+function pageLines(ctx: EngineContext, page: number): Fragment[][] {
+  let analysed: PageText | null = null;
+  try {
+    analysed = ocr.mergePageText(ctx, text.analyzePage(ctx, page));
+  } catch {
+    analysed = null;
+  }
+  if (analysed) {
+    const level = analysed.lines.filter((l) => Math.abs(Math.sin(l.angle)) < 0.2 && Math.cos(l.angle) > 0);
+    const turned = analysed.lines.filter((l) => !level.includes(l));
+    return [level, turned];
+  }
+  return withPage(ctx.doc, page, (p) => {
+    const lines: Fragment[] = [];
+    const stext = p.toStructuredText("preserve-whitespace");
+    let current: Fragment | null = null;
+    stext.walk({
+      beginLine(bbox) {
+        current = { text: "", rect: bbox, dir: "ltr" };
+      },
+      onChar(c) {
+        if (current) current.text += c;
+      },
+      endLine() {
+        if (current?.text.trim()) {
+          if (/^[^\p{L}]*[\p{Script=Arabic}\p{Script=Hebrew}]/u.test(current.text)) current.dir = "rtl";
+          lines.push(current);
+        }
+        current = null;
+      },
+    });
+    stext.destroy();
+    return [lines];
+  });
+}
+
+export function exportText(ctx: EngineContext, pages?: number[]): string {
+  return pageSelection(ctx.doc, pages)
+    .map((page) =>
+      pageLines(ctx, page)
+        .flatMap((group) => readingOrder(group.filter((l) => l.text.trim())))
+        .join("\n"),
+    )
+    .join("\n\n");
+}
