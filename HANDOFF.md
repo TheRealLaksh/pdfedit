@@ -48,34 +48,23 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 <!-- handoff:auto:start -->
 ## Auto: repo state
 
-_Refreshed 27 Nov 2026, 9:13 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
+_Refreshed 27 Nov 2026, 9:14 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
 
-Branch: `?` · remote: none
+Branch: `main` · remote: none
 
 ### Last 15 commits
 
-- (no commits yet)
+- `239e715` 2026-11-27 21:13 chore: project setup, tooling and AGPL licence
 
 ### Uncommitted changes at refresh time
 
 ```
-A  .gitattributes
-A  .gitignore
-A  LICENSE
-A  index.html
-A  package-lock.json
-A  package.json
-A  public/_headers
-A  tsconfig.json
-A  vite.config.ts
-A  vitest.config.ts
-?? .claude/
-?? .githooks/
-?? CLAUDE.md
-?? HANDOFF.md
-?? README.md
-?? docs/
-?? scripts/
+A  .claude/settings.json
+A  .githooks/pre-commit
+A  CLAUDE.md
+A  README.md
+A  docs/MODULES.md
+A  scripts/handoff.mjs
 ?? src/
 ```
 <!-- handoff:auto:end -->
