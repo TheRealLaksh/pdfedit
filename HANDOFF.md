@@ -71,6 +71,7 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `72182c2` 2026-11-27 23:28 fix(engine): cap content parser nesting
 - `b4aaf22` 2026-11-27 23:28 fix(engine): restart a crashed or hung worker and replay the document
 - `011c3a4` 2026-11-27 23:06 fix(phone): landscape and 320px editor layout, dark swatches and safer service worker updates
 - `e3f850d` 2026-11-27 22:42 docs: record Cloudflare Pages project and domain
@@ -85,23 +86,22 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `07b5c8a` 2026-11-27 22:18 test: multi-language PDF corpus and Playwright config
 - `5d86f69` 2026-11-27 22:07 fix(shell): zoom buttons follow the viewer's real fit scale
 - `0be61f4` 2026-11-27 22:06 feat(viewer): virtualised pages, inline text editing and on-page tools
-- `41db324` 2026-11-27 22:06 fix(engine): hold calls until the worker has loaded so an early open cannot hang
 
 ### Uncommitted changes at refresh time
 
 ```
 M public/_headers
  M src/App.tsx
-M  src/engine/content/tokenizer.ts
  M src/engine/fonts/draw.ts
  M src/engine/fonts/index.ts
  M src/engine/fonts/inspect.ts
  M src/engine/fonts/layout.ts
  M src/engine/fonts/types.ts
- M src/engine/ops/export.ts
- M src/engine/ops/forms.ts
- M src/engine/ops/images.ts
- M src/engine/ops/pages.ts
+M  src/engine/ops/export.ts
+M  src/engine/ops/forms.ts
+A  src/engine/ops/guard.ts
+M  src/engine/ops/images.ts
+M  src/engine/ops/pages.ts
  M src/engine/text/analyze.ts
  M src/engine/text/diff.ts
  M src/engine/text/edit.ts
@@ -123,15 +123,13 @@ M  src/engine/content/tokenizer.ts
  M src/ui/viewer/layers/PlaceLayer.tsx
  M src/ui/viewer/layers/SelectLayer.tsx
  M src/ui/viewer/pageData.ts
-A  tests/integration/tokenizer.test.ts
+A  tests/integration/robustness.test.ts
+A  tests/ops/listbox.test.ts
  M tests/text/mockFonts.ts
-?? src/engine/ops/guard.ts
 ?? src/ui/shell/backGuard.ts
 ?? tests/e2e/back.spec.ts
 ?? tests/e2e/desktop.spec.ts
-?? tests/integration/robustness.test.ts
 ?? tests/ocr/pin.test.ts
-?? tests/ops/listbox.test.ts
 ?? tests/text/fidelity.test.ts
 ```
 <!-- handoff:auto:end -->

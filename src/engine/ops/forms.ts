@@ -267,7 +267,8 @@ async function drawValue(ctx: EngineContext, doc: Doc, widget: Obj): Promise<str
   const shown = options(widget);
   const display = type === "text" ? value : (shown.find((o) => o.value === value)?.label ?? value);
   const everything = type === "listbox" ? shown.map((o) => o.label).join("") + display : display;
-  if (WESTERN.test(everything) && drawNative(ctx, doc, widget, type, value)) return [];
+  // MuPDF's list boxes come without the mark on the chosen entry, so those are always drawn here
+  if (type !== "listbox" && WESTERN.test(everything) && drawNative(ctx, doc, widget, type, value)) return [];
   return drawCustom(ctx, doc, widget, type, display);
 }
 
@@ -391,15 +392,17 @@ async function drawCustom(ctx: EngineContext, doc: Doc, widget: Obj, type: Type,
     if (auto) style.size = Math.min(12, Math.max(4, height / 4));
     const line = style.size * 1.3;
     const list = options(widget);
-    const selected = textOf(inherited(widget, "V"));
-    const chosen = list.findIndex((o) => o.value === selected);
+    // several entries may be chosen at once
+    const held = inherited(widget, "V");
+    const selected = new Set(held.isArray() ? arrayItems(held).map(textOf) : [textOf(held)]);
+    const chosen = list.findIndex((o) => selected.has(o.value));
     // keep the selection in view
     const visible = Math.max(1, Math.floor((height - 2 * border) / line));
     const top = Math.max(0, Math.min(integer(widget.get("TI")), list.length - 1));
     const first = chosen >= 0 && (chosen < top || chosen >= top + visible) ? Math.max(0, chosen - visible + 1) : top;
     for (let i = first; i < list.length && (i - first) * line < height; i++) {
       const y = height - border - (i - first + 1) * line;
-      if (i === chosen) ops.push(`q 0.6 0.76 0.85 rg ${num(border)} ${num(y)} ${num(width - 2 * border)} ${num(line)} re f Q`);
+      if (selected.has(list[i]!.value)) ops.push(`q 0.6 0.76 0.85 rg ${num(border)} ${num(y)} ${num(width - 2 * border)} ${num(line)} re f Q`);
       const planned = await plan(list[i]!.label);
       await write(list[i]!.label, pad, y + (line - planned.ascent - planned.descent) / 2 + planned.descent);
     }

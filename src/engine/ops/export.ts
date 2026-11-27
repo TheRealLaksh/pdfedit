@@ -8,6 +8,7 @@ import * as text from "../text";
 import type { ExportOptions, PageText, Rect } from "../types";
 import { ensureAppearances } from "./forms";
 import { cloneDocument } from "./clone";
+import { inspectPage } from "./guard";
 import { discardPages, pageRefs } from "./pages";
 import { orderByDirection, type Directed } from "./readingOrder";
 import { assertPage, latin1, pageSelection, streamBytes, withPage } from "./shared";
@@ -34,7 +35,8 @@ export async function exportPdf(ctx: EngineContext, options: ExportOptions = {})
       await ensureAppearances({ ...ctx, doc: clone, cache: new Map(), state: structuredClone(ctx.state) }, clone);
       clone.bake(true, true);
     }
-    if (options.compress) {
+    // subsetting follows what every page draws: drawings inside themselves crash it
+    if (options.compress && subsettable(clone)) {
       try {
         clone.subsetFonts();
       } catch {
@@ -61,6 +63,9 @@ export async function exportPdf(ctx: EngineContext, options: ExportOptions = {})
     clone.destroy();
   }
 }
+
+const subsettable = (doc: MuPDF.PDFDocument) =>
+  Array.from({ length: doc.countPages() }, (_, i) => i).every((i) => !inspectPage(doc, i).redact);
 
 /** say truthfully when the file was last changed, in both metadata places */
 function stampModified(doc: MuPDF.PDFDocument, now: Date) {

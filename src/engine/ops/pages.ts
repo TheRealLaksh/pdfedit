@@ -367,11 +367,13 @@ export async function insertPdf(ctx: EngineContext, bytes: Uint8Array, at: numbe
       if (!source.authenticatePassword(password)) throw new Error("Wrong password for the PDF being inserted");
     }
     const pdf = source.asPDF();
-    if (!pdf || pdf.countPages() < 1) throw new Error("This file has no pages that can be inserted");
+    // a PNG or JPEG given a .pdf name becomes a page
+    if (!pdf && (bytes[0] === 0x89 || (bytes[0] === 0xff && bytes[1] === 0xd8))) return await insertImagesAsPages(ctx, [bytes], at);
+    if (!pdf || readable(() => pdf.countPages()) < 1) throw new Error("This file has no pages that can be inserted");
     const position = insertPosition(ctx.doc, at);
     const map = ctx.doc.newGraftMap();
-    const sources = pageRefs(pdf);
-    const added = sources.map((page) => {
+    const sources = readable(() => pageRefs(pdf));
+    const added = readable(() => sources.map((page) => {
       const dict = ctx.doc.newDictionary();
       dict.put("Type", ctx.doc.newName("Page"));
       for (const key of ["Contents", "Resources", "MediaBox", "CropBox", "BleedBox", "TrimBox", "ArtBox", "Rotate", "UserUnit", "Group"]) {
@@ -379,12 +381,21 @@ export async function insertPdf(ctx: EngineContext, bytes: Uint8Array, at: numbe
         if (!value.isNull()) dict.put(key, map.graftObject(value));
       }
       return ctx.doc.addObject(dict);
-    });
-    const warnings = insertAnnotations(ctx.doc, pdf, map, sources, added);
+    }));
+    const warnings = readable(() => insertAnnotations(ctx.doc, pdf, map, sources, added));
     map.destroy();
     return { ...insertRefs(ctx, position, added), warnings };
   } finally {
     source.destroy();
+  }
+}
+
+/** MuPDF's complaints about a broken file, in words that mean something */
+function readable<T>(read: () => T): T {
+  try {
+    return read();
+  } catch (e) {
+    throw new Error(`This PDF is damaged, so its pages could not be inserted (${(e as Error).message})`);
   }
 }
 

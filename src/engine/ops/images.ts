@@ -50,6 +50,8 @@ const MOVE_TAG = "PEImg";
 function collect(page: MuPDF.PDFPage, hidden: Set<number>): ImageUse[] {
   const toPage = page.getTransform() as Matrix;
   const found: ImageUse[] = [];
+  // forms drawn over and over would otherwise be read for ever
+  let forms = 5000;
 
   const visit = (content: Uint8Array, resources: MuPDF.PDFObject, state: GraphicsState, chain: Step[], seen: number[]) => {
     walk(content, parseContent(content), resources, toPage, state, {
@@ -76,7 +78,7 @@ function collect(page: MuPDF.PDFPage, hidden: Set<number>): ImageUse[] {
         if (x.subtype === "Image") add(x.object.get("Width").asNumber(), x.object.get("Height").asNumber());
         else if (x.subtype === "Form") {
           const number = x.object.isIndirect() ? x.object.asIndirect() : 0;
-          if (seen.length >= 12 || seen.includes(number)) return;
+          if (seen.length >= 12 || seen.includes(number) || forms-- <= 0) return;
           const own = x.object.get("Resources");
           visit(
             streamBytes(x.object),
