@@ -1,52 +1,204 @@
-/** Main-thread proxy for the engine worker: `await engine.renderPage(0, 2)` */
-import type { EngineAPI, EngineRequest, EngineResponse } from "./types";
+/**
+ * Main-thread proxy for the engine worker: `await engine.renderPage(0, 2)`.
+ *
+ * One call is sent at a time. The proxy remembers how the open document was built (the file and every
+ * change that succeeded), so when the worker dies (a wasm crash, out of memory, a call that never ends)
+ * it starts a new one, rebuilds the document and carries on. Only the call that caused it fails.
+ */
+import type { EngineAPI, EngineRequest, EngineResponse, OpenResult } from "./types";
+
+/** `fatal`: the worker that sends this cannot be used any more */
+type Reply = EngineResponse & { fatal?: boolean };
+
+interface Step {
+  method: string;
+  args: unknown[];
+}
+
+interface Call extends Step {
+  id: number;
+  /** set while rebuilding the document after a restart: nobody waits for the answer */
+  replay?: "open" | "change";
+  resolve: (v: unknown) => void;
+  reject: (e: Error) => void;
+}
+
+/** calls that change the document, in the order they must be repeated */
+const CHANGES = new Set(
+  (
+    "editLines replaceText setOcrResult makeSearchable addObject updateObject removeObject moveImage " +
+    "deleteImage replaceImage setFormField rotatePages deletePages reorderPages duplicatePage insertBlankPage " +
+    "insertPdf insertImagesAsPages redactAreas addWatermark addPageNumbers undo redo addUserFont"
+  ).split(" "),
+);
+
+/** calls about one page that only look: the one that broke the engine is not tried again */
+const PAGE_READS = new Set(["renderPage", "getPageText", "listImages", "listObjects", "exportPageImage"]);
+
+/** how long a call may run before the engine counts as hung (milliseconds) */
+const LIMITS: Record<string, number> = { renderPage: 60_000, getPageText: 90_000, listImages: 90_000, open: 150_000 };
+const LIMIT = 300_000;
+
+export const HUNG = "This took too long, so it was stopped. Your earlier changes are kept.";
+export const LOST = "The PDF engine stopped and the document could not be restored. Please open the file again.";
+export const UNOPENABLE = "This file could not be opened: the PDF engine crashed while reading it.";
+export const NOT_DOWNLOADED = "The editor could not be downloaded. Check your connection and try again.";
+
+let announce: () => void = () => {};
+/** resolves when the engine has been downloaded and has started for the first time */
+export const engineReady: Promise<void> = new Promise((resolve) => (announce = resolve));
 
 let worker: Worker | null = null;
 /** the worker only listens once its wasm modules have loaded: hold calls until it says so */
 let ready = false;
-let backlog: EngineRequest[] = [];
+let queue: Call[] = [];
+let active: Call | null = null;
+let timer: ReturnType<typeof setTimeout> | undefined;
 let nextId = 1;
-const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
+/** how the open document was made, and what has been done to it since */
+let journal: { open: Step; steps: Step[] } | null = null;
+/** the last worker is gone: a new one has to rebuild the document first */
+let empty = false;
+/** page reads that broke the engine, and why */
+const broken = new Map<string, string>();
 
-function start(): Worker {
-  if (worker) return worker;
+function start(): void {
+  if (worker) return;
   ready = false;
-  worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
-  worker.onmessage = (event: MessageEvent<EngineResponse>) => {
-    const msg = event.data;
-    if (msg.id === 0) {
-      ready = true;
-      for (const request of backlog) worker?.postMessage(request);
-      backlog = [];
-      return;
-    }
-    const call = pending.get(msg.id);
-    if (!call) return;
-    pending.delete(msg.id);
-    if (msg.ok) call.resolve(msg.result);
-    else call.reject(Object.assign(new Error(msg.error), { stack: msg.stack }));
+  if (empty && journal) {
+    const again = (step: Step, replay: "open" | "change"): Call => ({
+      ...step,
+      id: nextId++,
+      replay,
+      resolve: () => {},
+      reject: () => {},
+    });
+    queue = [again(journal.open, "open"), ...journal.steps.map((s) => again(s, "change")), ...queue.filter((c) => !c.replay)];
+  }
+  empty = false;
+  const created = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
+  worker = created;
+  created.onmessage = (event: MessageEvent<Reply>) => {
+    if (worker === created) receive(event.data);
   };
-  worker.onerror = (event) => {
-    const error = new Error(event.message || "The PDF engine stopped unexpectedly");
-    for (const call of pending.values()) call.reject(error);
-    pending.clear();
-    backlog = [];
-    worker?.terminate();
-    worker = null;
+  created.onerror = (event) => {
+    if (worker !== created) return;
+    event.preventDefault?.();
+    if (ready) return crash(event.message || "The PDF engine stopped unexpectedly");
+    // it never started (offline, blocked): fail what is waiting and try again with the next call.
+    // The browser's own wording ("Uncaught RuntimeError: Aborted(NetworkError ...") helps nobody.
+    console.error("engine failed to start", event.message);
+    const waiting = [...(active ? [active] : []), ...queue].filter((c) => !c.replay);
+    drop();
+    queue = [];
+    for (const call of waiting) call.reject(new Error(NOT_DOWNLOADED));
   };
-  return worker;
+}
+
+function drop(): void {
+  clearTimeout(timer);
+  active = null;
+  worker?.terminate();
+  worker = null;
+  ready = false;
+  empty = true;
+}
+
+function receive(msg: Reply): void {
+  if (msg.id === 0) {
+    ready = true;
+    announce();
+    pump();
+    return;
+  }
+  const call = active;
+  if (!call || msg.id !== call.id) return;
+  if (!msg.ok && msg.fatal) return crash(msg.error);
+  clearTimeout(timer);
+  active = null;
+  if (call.replay === "open" && !(msg.ok && (msg.result as OpenResult).status === "ok")) return lose();
+  if (msg.ok) {
+    if (!call.replay) record(call, msg.result);
+    call.resolve(msg.result);
+  } else call.reject(Object.assign(new Error(msg.error), { stack: msg.stack }));
+  pump();
+}
+
+/** the worker is unusable: fail the running call, throw the worker away and rebuild the document */
+function crash(message: string): void {
+  const call = active;
+  drop();
+  if (call?.replay) return lose();
+  if (call) {
+    if (PAGE_READS.has(call.method)) broken.set(`${call.method}:${String(call.args[0])}`, message);
+    const opening = call.method === "open" || call.method === "createFromImages";
+    call.reject(new Error(opening && message !== HUNG ? UNOPENABLE : message));
+  }
+  // rebuild straight away, so the document is back before the next action
+  if (journal || queue.length) start();
+}
+
+/** rebuilding failed as well: give the document up instead of going round in circles */
+function lose(): void {
+  drop();
+  journal = null;
+  const waiting = queue.filter((c) => !c.replay);
+  queue = [];
+  for (const call of waiting) call.reject(new Error(LOST));
+}
+
+function record(call: Call, result: unknown): void {
+  const step: Step = { method: call.method, args: call.args };
+  if (call.method === "open" || call.method === "createFromImages") {
+    if ((result as OpenResult).status !== "ok") return;
+    // fonts the user added stay available in every document opened later
+    journal = { open: step, steps: journal?.steps.filter((s) => s.method === "addUserFont") ?? [] };
+    broken.clear();
+  } else if (call.method === "close") {
+    journal = null;
+    broken.clear();
+  } else if (CHANGES.has(call.method)) {
+    journal?.steps.push(step);
+    // the page may be different now
+    if (call.method !== "addUserFont") broken.clear();
+  }
+}
+
+function pump(): void {
+  if (!worker || !ready || active) return;
+  const call = queue.shift();
+  if (!call) return;
+  active = call;
+  try {
+    worker.postMessage({ id: call.id, method: call.method, args: call.args } as EngineRequest);
+  } catch (e) {
+    active = null;
+    call.reject(e instanceof Error ? e : new Error(String(e)));
+    pump();
+    return;
+  }
+  watch(LIMITS[call.method] ?? LIMIT);
+}
+
+function watch(limit: number): void {
+  const since = Date.now();
+  timer = setTimeout(() => {
+    // timers of a sleeping or hidden tab fire late: that says nothing about the engine
+    const asleep = Date.now() - since > limit * 1.5 || (typeof document !== "undefined" && document.hidden);
+    if (asleep) watch(limit);
+    else crash(HUNG);
+  }, limit);
 }
 
 export const engine = new Proxy({} as EngineAPI, {
   get(_target, method: string) {
     return (...args: unknown[]) =>
       new Promise((resolve, reject) => {
-        const id = nextId++;
-        pending.set(id, { resolve, reject });
-        const request = { id, method, args } as EngineRequest;
-        const target = start();
-        if (ready) target.postMessage(request);
-        else backlog.push(request);
+        const refused = PAGE_READS.has(method) ? broken.get(`${method}:${String(args[0])}`) : undefined;
+        if (refused) return reject(new Error(refused));
+        queue.push({ id: nextId++, method, args, resolve, reject });
+        start();
+        pump();
       });
   },
 });

@@ -1,25 +1,16 @@
 /// <reference lib="webworker" />
-import { Engine } from "./engine";
+import { answer, Engine } from "./engine";
 import type { EngineRequest, EngineResponse } from "./types";
 
 const engine = new Engine();
 let queue: Promise<unknown> = Promise.resolve();
 
 self.onmessage = (event: MessageEvent<EngineRequest>) => {
-  const { id, method, args } = event.data;
   // one call at a time: modules share one mutable document
   queue = queue.then(async () => {
-    try {
-      const fn = engine[method] as (...a: unknown[]) => Promise<unknown>;
-      const result = await fn.apply(engine, args);
-      const reply: EngineResponse = { id, ok: true, result };
-      self.postMessage(reply, transferables(result));
-    } catch (e) {
-      const error = e instanceof Error ? e : new Error(String(e));
-      console.error(`engine.${method}`, error);
-      const reply: EngineResponse = { id, ok: false, error: error.message, stack: error.stack };
-      self.postMessage(reply);
-    }
+    const reply = await answer(engine, event.data);
+    if (!reply.ok) console.error(`engine.${event.data.method}`, reply.stack ?? reply.error);
+    self.postMessage(reply, reply.ok ? transferables(reply.result) : []);
   });
 };
 

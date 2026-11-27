@@ -34,6 +34,10 @@ export interface DocInfo {
   hasForms: boolean;
   /** MuPDF had to repair a damaged file */
   repaired: boolean;
+  /** uses XFA forms, which only Adobe's software shows fully */
+  xfa?: boolean;
+  /** the author restricted editing (owner password only); the exported copy does not carry that */
+  restricted?: boolean;
 }
 
 export interface FontStyle {
