@@ -10,7 +10,7 @@
     "lint": "oxlint src tests",
     "test": "vitest run",
     "e2e": "playwright test",
-    "deploy": "npm run build && wrangler pages deploy dist --project-name=pdfedit --branch=main",
+    "deploy": "npm run build && npx --yes wrangler@4 pages deploy dist --project-name=pdfedit --branch=main",
     "handoff": "node scripts/handoff.mjs auto"
   },
   "type": "module",
