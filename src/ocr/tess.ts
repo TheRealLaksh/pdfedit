@@ -5,6 +5,8 @@
 import type Tesseract from "tesseract.js";
 
 export const TESSERACT_VERSION = "7.0.0";
+/** version of every @tesseract.js-data language package */
+export const LANGUAGE_DATA_VERSION = "1.0.0";
 
 export interface OcrConfig {
   workerPath?: string;
@@ -29,6 +31,26 @@ let config: OcrConfig = { ...defaults };
 
 export function configureOcr(next: OcrConfig): void {
   config = { ...defaults, ...next };
+}
+
+/**
+ * tesseract.js asks the CDN for language data without a package version, so whatever was published last
+ * would be used. This is a small worker that pins those requests and then loads the real one.
+ */
+export function pinnedWorkerSource(workerPath: string): string {
+  const unpinned = String.raw`/^(https:\/\/cdn\.jsdelivr\.net\/npm\/@tesseract\.js-data\/[A-Za-z_]+)\//`;
+  return [
+    "const load = self.fetch.bind(self);",
+    `self.fetch = (url, init) => load(typeof url === "string" ? url.replace(${unpinned}, "$1@${LANGUAGE_DATA_VERSION}/") : url, init);`,
+    `importScripts(${JSON.stringify(workerPath)});`,
+  ].join("\n");
+}
+
+let shim: { path: string; url: string } | null = null;
+function pinnedWorker(path: string): string {
+  if (shim?.path !== path)
+    shim = { path, url: URL.createObjectURL(new Blob([pinnedWorkerSource(path)], { type: "text/javascript" })) };
+  return shim.url;
 }
 
 export type Log = (status: string, progress: number) => void;
@@ -56,6 +78,8 @@ async function create(langs: string[], oem: 0 | 1): Promise<Tesseract.Worker> {
   };
   for (const [k, v] of Object.entries(config)) if (v !== undefined) options[k] = v;
   if (oem === 0) Object.assign(options, { legacyCore: true, legacyLang: true });
+  if (inBrowser && config.workerPath)
+    Object.assign(options, { workerPath: pinnedWorker(config.workerPath), workerBlobURL: false });
   const worker = await guard(createWorker(langs, oem as unknown as Tesseract.OEM, options));
   if (born !== generation) {
     await worker.terminate();

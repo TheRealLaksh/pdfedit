@@ -1,7 +1,7 @@
 /** Main-thread OCR (tesseract.js, runs fully in the browser). Owner: OCR module. */
 import { multiply } from "../engine/geom";
 import type { Matrix, OcrPageResult, OcrProgress, RenderedPage } from "../engine/types";
-import { convertBlocks, weightedConfidence, type RawBlock } from "./convert";
+import { convertBlocks, weightedConfidence, type Box, type RawBlock } from "./convert";
 import { alternatives, PROBES } from "./detect";
 import { OCR_LANGUAGES, SCRIPT_DEFAULTS } from "./languages";
 import { cleanImage, densestBand, encodePGM, removeRules, shrink, straighten, toGray, turn, type Gray, type Prepared } from "./preprocess";
@@ -151,6 +151,7 @@ async function run(image: RenderedPage, options: RecognizeOptions, cancelled: ()
       }
     }
     result = await asOneBlock(result, prepared.image, dpi, check, report);
+    result = await secondScript(result, prepared.image, dpi, check, report);
     // the guess that the page lay on its side may have been wrong
     if (turnedBy !== 0 && result.confidence < 60) {
       const upright = straighten(asScanned);
@@ -176,7 +177,7 @@ const withoutRules = (p: Prepared, dpi: number): Prepared => ({ ...p, image: rem
 /** English is read alongside other scripts: numbers, names and addresses are often Latin.
  * The Chinese, Japanese and Korean models already know Latin and lose lines when mixed with it. */
 function withEnglish(lang: string): string[] {
-  const script = OCR_LANGUAGES.find((l) => l.code === lang)?.script ?? "";
+  const script = scriptOf(lang);
   return ["Latin", "Han", "Japanese", "Hangul"].includes(script) ? [lang] : [lang, "eng"];
 }
 
@@ -232,6 +233,59 @@ async function asOneBlock(first: Pass, image: Gray, dpi: number, check: () => vo
   const retry = await pass(image, first.languages, dpi, check, report, 0.9, 0.95, "6");
   return retry.confidence >= 65 && retry.score > first.score * 1.03 ? retry : first;
 }
+
+/**
+ * A page in two scripts (a Hindi form with English headings, say) is detected as one of them and the
+ * other comes out as nonsense. Ask which script the badly read lines are in and, if it is a different
+ * one, read the page again with both.
+ */
+async function secondScript(first: Pass, image: Gray, dpi: number, check: () => void, report: Report): Promise<Pass> {
+  const doubtful = doubtfulLines(first.blocks);
+  if (!doubtful.length) return first;
+  check();
+  // script detection wants a fair number of characters: show it the doubtful lines several times over
+  const strip = stack(image, Array.from({ length: Math.max(12, doubtful.length) }, (_, i) => doubtful[i % doubtful.length]!));
+  const guess = await detectScript(encodePGM(strip), (s) => report(describe(s, []), 0.9));
+  check();
+  const other = guess?.script ? SCRIPT_DEFAULTS[guess.script]?.[0] : undefined;
+  if (!other || first.languages.some((l) => scriptOf(l) === scriptOf(other))) return first;
+  const retry = await pass(image, [other, ...first.languages], dpi, check, report, 0.9, 0.95);
+  return retry.score > first.score * 1.05 ? retry : first;
+}
+
+/** boxes of lines read with little confidence, when enough others were read well */
+export function doubtfulLines(blocks: RawBlock[]): Box[] {
+  const lines = blocks.flatMap((b) => b.paragraphs.flatMap((p) => p.lines));
+  const weak: Box[] = [];
+  let sure = 0;
+  for (const line of lines) {
+    const words = line.words.filter((w) => w.text.trim());
+    if (words.reduce((n, w) => n + w.text.length, 0) < 4) continue;
+    if (weightedConfidence(words) < 60) weak.push(line.bbox);
+    else sure++;
+  }
+  return sure ? weak.slice(0, 12) : [];
+}
+
+/** the given parts of the picture, one under another on white */
+function stack(image: Gray, boxes: Box[]): Gray {
+  const pad = 8;
+  const parts = boxes.map((b) => ({
+    x: Math.max(0, Math.floor(b.x0) - pad),
+    y: Math.max(0, Math.floor(b.y0) - pad),
+    w: Math.min(image.width, Math.ceil(b.x1) + pad),
+    h: Math.min(image.height, Math.ceil(b.y1) + pad),
+  }));
+  const width = Math.max(1, ...parts.map((p) => p.w - p.x));
+  const height = Math.max(1, parts.reduce((sum, p) => sum + Math.max(0, p.h - p.y), 0));
+  const data = new Uint8Array(width * height).fill(255);
+  let row = 0;
+  for (const p of parts)
+    for (let y = p.y; y < p.h; y++, row++) data.set(image.data.subarray(y * image.width + p.x, y * image.width + p.w), row * width);
+  return { data, width, height };
+}
+
+const scriptOf = (lang: string) => OCR_LANGUAGES.find((l) => l.code === lang)?.script ?? "";
 
 /** read a strip of the page with several models and keep the most believable one */
 async function probe(

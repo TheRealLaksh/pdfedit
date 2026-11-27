@@ -71,6 +71,7 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `31c2352` 2026-11-27 23:28 fix(ops): guard hostile documents and keep list box highlights
 - `72182c2` 2026-11-27 23:28 fix(engine): cap content parser nesting
 - `b4aaf22` 2026-11-27 23:28 fix(engine): restart a crashed or hung worker and replay the document
 - `011c3a4` 2026-11-27 23:06 fix(phone): landscape and 320px editor layout, dark swatches and safer service worker updates
@@ -85,23 +86,17 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `83b812e` 2026-11-27 22:18 test: integration and browser test suites
 - `07b5c8a` 2026-11-27 22:18 test: multi-language PDF corpus and Playwright config
 - `5d86f69` 2026-11-27 22:07 fix(shell): zoom buttons follow the viewer's real fit scale
-- `0be61f4` 2026-11-27 22:06 feat(viewer): virtualised pages, inline text editing and on-page tools
 
 ### Uncommitted changes at refresh time
 
 ```
-M public/_headers
+M  public/_headers
  M src/App.tsx
  M src/engine/fonts/draw.ts
  M src/engine/fonts/index.ts
  M src/engine/fonts/inspect.ts
  M src/engine/fonts/layout.ts
  M src/engine/fonts/types.ts
-M  src/engine/ops/export.ts
-M  src/engine/ops/forms.ts
-A  src/engine/ops/guard.ts
-M  src/engine/ops/images.ts
-M  src/engine/ops/pages.ts
  M src/engine/text/analyze.ts
  M src/engine/text/diff.ts
  M src/engine/text/edit.ts
@@ -109,8 +104,8 @@ M  src/engine/ops/pages.ts
  M src/engine/text/layout.ts
  M src/engine/text/pdffont.ts
  M src/engine/text/rewrite.ts
- M src/ocr/index.ts
- M src/ocr/tess.ts
+M  src/ocr/index.ts
+M  src/ocr/tess.ts
  M src/store/index.ts
  M src/ui/shell/Feedback.tsx
  M src/ui/shell/actions.ts
@@ -123,13 +118,11 @@ M  src/engine/ops/pages.ts
  M src/ui/viewer/layers/PlaceLayer.tsx
  M src/ui/viewer/layers/SelectLayer.tsx
  M src/ui/viewer/pageData.ts
-A  tests/integration/robustness.test.ts
-A  tests/ops/listbox.test.ts
+A  tests/ocr/pin.test.ts
  M tests/text/mockFonts.ts
 ?? src/ui/shell/backGuard.ts
 ?? tests/e2e/back.spec.ts
 ?? tests/e2e/desktop.spec.ts
-?? tests/ocr/pin.test.ts
 ?? tests/text/fidelity.test.ts
 ```
 <!-- handoff:auto:end -->
