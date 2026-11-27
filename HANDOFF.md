@@ -35,6 +35,9 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 - OCR landed: 122 languages; scanned text is covered (not erased) when replaced; Telugu/Kannada/Malayalam/Urdu
   recognise at about 82-91%.
 - All 7 modules integrated: 1040 vitest tests pass, typecheck clean. Next: second-round testing agents.
+- Cloudflare Pages project `pdfedit` (https://pdfedit-177.pages.dev) created with `wrangler pages project
+  create --force` (plain create now tries Workers); first deploy done; custom domain added in the dashboard
+  (CNAME pdfedit to pdfedit-177.pages.dev). No git auto-deploy: deploy with `npm run deploy`.
 - Cross-module couplings to keep: hidden text-layer line ids end ".h"; ops reads OCR `edits.__page`,
   `patch.object`, `textForm`; `text/fallback.ts` and `ocr/edit.ts` import `ops/redactContent.ts`.
 
@@ -62,12 +65,13 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 <!-- handoff:auto:start -->
 ## Auto: repo state
 
-_Refreshed 27 Nov 2026, 10:37 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
+_Refreshed 27 Nov 2026, 10:42 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
 
 Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `c2c020b` 2026-11-27 22:37 fix(engine): record an undo step only when the document changed
 - `e6302e6` 2026-11-27 22:37 feat(ocr): in-browser recognition and native-looking edits on scanned pages
 - `8982559` 2026-11-27 22:30 docs: handoff status for text and tests
 - `46f08ff` 2026-11-27 22:30 feat(text): edit existing text in place, keeping the document's fonts, colours and positions
@@ -82,11 +86,10 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `c562164` 2026-11-27 21:51 docs: handoff status for operations and shell
 - `08908b8` 2026-11-27 21:50 feat(shell): start screen, editor chrome, panels and dialogs
 - `942591c` 2026-11-27 21:50 feat(shell): design tokens, app icons and PWA assets
-- `8e1236b` 2026-11-27 21:50 fix(store): stay busy until overlapping calls all finish
 
 ### Uncommitted changes at refresh time
 
 ```
-M  src/engine/engine.ts
+M  HANDOFF.md
 ```
 <!-- handoff:auto:end -->
