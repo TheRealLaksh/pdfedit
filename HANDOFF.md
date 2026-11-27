@@ -28,8 +28,10 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
   it corrupts undo (ops copies objects instead, `ops/clone.ts`).
 - SHELL not verified: real devices / iOS keyboard, touch drag-reorder, user-font upload, SW update across deploys.
 - VIEWER landed, checked in Chromium and WebKit emulation; no real-device keyboard test, no unit tests.
-  Wanted: one-step undo for multi-line highlight / multi-page redaction; undo while typing drops the draft;
-  friendlier substitute font names ("OTS-derived-font" shown for Chinese).
+  Wanted: one-step undo for multi-line highlight / multi-page redaction.
+- TEXT landed: 709/709 integration + text tests; corpus extraction 407/411 lines exact. Limits: no paragraph
+  reflow, search stops at line breaks, 21k-glyph pages take 290-700 ms, stacked vertical CJK loses typed spaces.
+- TESTS landed: 60-file multi-language corpus, integration and Playwright e2e suites.
 
 ## Next steps
 1. Build the 7 modules (TEXT, FONTS, OCR, OPS, VIEWER, SHELL, TESTS).
@@ -61,6 +63,7 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `46f08ff` 2026-11-27 22:30 feat(text): edit existing text in place, keeping the document's fonts, colours and positions
 - `5ce54d9` 2026-11-27 22:24 fix(viewer): safe document close, 44px size buttons and undo while typing
 - `126fec4` 2026-11-27 22:22 fix(ops): keep stroke state on redaction, order rotated text, quiet export after undo
 - `e74c459` 2026-11-27 22:19 fix(engine): leave internal font names out of the substitution notice
@@ -75,36 +78,13 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `8e1236b` 2026-11-27 21:50 fix(store): stay busy until overlapping calls all finish
 - `02ee33c` 2026-11-27 21:50 feat(ops): added objects, images, forms, page tools, redaction and export
 - `9c783bf` 2026-11-27 21:49 fix(engine): drop MuPDF's font cache after every mutation, undo and redo
-- `fda0c3d` 2026-11-27 21:49 feat(fonts): font catalog, HarfBuzz shaping and embedding for all scripts
 
 ### Uncommitted changes at refresh time
 
 ```
-M src/engine/ocr/index.ts
-A  src/engine/text/analyze.ts
-A  src/engine/text/cmap.ts
-A  src/engine/text/color.ts
-A  src/engine/text/diff.ts
-A  src/engine/text/edit.ts
-A  src/engine/text/encode.ts
-A  src/engine/text/encodings.ts
-A  src/engine/text/fallback.ts
-M  src/engine/text/index.ts
-A  src/engine/text/interpret.ts
-A  src/engine/text/layout.ts
-A  src/engine/text/pdffont.ts
-A  src/engine/text/probe.ts
-A  src/engine/text/rewrite.ts
-A  src/engine/text/search.ts
-A  src/engine/text/unicode.ts
-M  src/engine/types.ts
+M  HANDOFF.md
+ M src/engine/ocr/index.ts
  M src/ocr/index.ts
-A  tests/text/analyze.test.ts
-A  tests/text/corpus.test.ts
-A  tests/text/edit.test.ts
-A  tests/text/helpers.ts
-A  tests/text/integration.test.ts
-A  tests/text/mockFonts.ts
 ?? src/engine/ocr/edit.ts
 ?? src/engine/ocr/fit.ts
 ?? src/engine/ocr/ink.ts
