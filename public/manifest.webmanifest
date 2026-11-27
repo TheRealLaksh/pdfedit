@@ -1,0 +1,19 @@
+{
+  "name": "PDFEdit",
+  "short_name": "PDFEdit",
+  "description": "Edit the existing text of any PDF in your browser. Your file never leaves your device.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4f4f2",
+  "theme_color": "#f4f4f2",
+  "lang": "en",
+  "categories": ["productivity", "utilities"],
+  "icons": [
+    { "src": "/icon.svg", "type": "image/svg+xml", "sizes": "any" },
+    { "src": "/icons/icon-192.png", "type": "image/png", "sizes": "192x192" },
+    { "src": "/icons/icon-512.png", "type": "image/png", "sizes": "512x512" },
+    { "src": "/icons/maskable-512.png", "type": "image/png", "sizes": "512x512", "purpose": "maskable" }
+  ]
+}

@@ -55,3 +55,42 @@
   --success: #62cf97;
   color-scheme: dark;
 }
+
+/* ---------- shell additions (SHELL module) ---------- */
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --radius-lg: 16px;
+  --rail-w: 60px;
+  --panel-w: 352px;
+  --scrim: rgb(15 15 18 / 0.42);
+  --focus: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --z-chrome: 20;
+  --z-sheet: 40;
+  --z-dialog: 60;
+  --z-busy: 70;
+  --z-toast: 80;
+  /* border strong enough (3:1) for form controls */
+  --control-border: #8a8a92;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --scrim: rgb(0 0 0 / 0.6);
+    --control-border: #6c6c76;
+  }
+}
+
+:root[data-theme="dark"] {
+  --scrim: rgb(0 0 0 / 0.6);
+  --control-border: #6c6c76;
+}

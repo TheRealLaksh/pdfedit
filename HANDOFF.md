@@ -55,6 +55,7 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `8e1236b` 2026-11-27 21:50 fix(store): stay busy until overlapping calls all finish
 - `02ee33c` 2026-11-27 21:50 feat(ops): added objects, images, forms, page tools, redaction and export
 - `9c783bf` 2026-11-27 21:49 fix(engine): drop MuPDF's font cache after every mutation, undo and redo
 - `fda0c3d` 2026-11-27 21:49 feat(fonts): font catalog, HarfBuzz shaping and embedding for all scripts
@@ -68,21 +69,23 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 ### Uncommitted changes at refresh time
 
 ```
-M index.html
+M  index.html
+A  public/icon.svg
+A  public/icons/apple-touch-icon.png
+A  public/icons/icon-192.png
+A  public/icons/icon-512.png
+A  public/icons/maskable-512.png
+A  public/manifest.webmanifest
+A  public/robots.txt
+A  public/sw.js
+A  public/theme.js
  M src/App.tsx
  M src/engine/ocr/index.ts
  M src/engine/text/index.ts
  M src/ocr/index.ts
-M  src/store/index.ts
- M src/ui/tokens.css
+M  src/ui/tokens.css
  M src/ui/viewer/Viewer.tsx
 ?? playwright.config.ts
-?? public/icon.svg
-?? public/icons/
-?? public/manifest.webmanifest
-?? public/robots.txt
-?? public/sw.js
-?? public/theme.js
 ?? src/engine/ocr/edit.ts
 ?? src/engine/ocr/fit.ts
 ?? src/engine/ocr/ink.ts

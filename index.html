@@ -7,9 +7,24 @@
     <meta name="description" content="Edit the existing text of any PDF in any language, free and private: your file never leaves your device." />
     <link rel="canonical" href="https://pdfedit.lakshpradhwani.com/" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="theme-color" content="#f4f4f2" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#131315" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1c1c1f" media="(prefers-color-scheme: dark)" />
+    <meta name="apple-mobile-web-app-title" content="PDFEdit" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="PDFEdit: edit any PDF in your browser" />
+    <meta property="og:description" content="Retype the text that is already in a PDF. Free, no account, and the file never leaves your device." />
+    <meta property="og:url" content="https://pdfedit.lakshpradhwani.com/" />
+    <meta property="og:image" content="https://pdfedit.lakshpradhwani.com/icons/icon-512.png" />
+    <style>
+      /* the right background before the stylesheet arrives */
+      html { background: #f4f4f2; }
+      @media (prefers-color-scheme: dark) { html:not([data-theme="light"]) { background: #131315; } }
+      html[data-theme="dark"] { background: #131315; }
+    </style>
+    <script src="/theme.js"></script>
   </head>
   <body>
     <div id="root"></div>
