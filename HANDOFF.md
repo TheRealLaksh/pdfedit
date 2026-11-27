@@ -71,6 +71,7 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `a4598bd` 2026-11-27 23:33 fix(viewer): keep a tap made while a change is saving
 - `4dd84e0` 2026-11-27 23:28 test: desktop and back-navigation browser tests
 - `41fa302` 2026-11-27 23:28 fix(shell): desktop and back-navigation fixes, restriction and XFA notices
 - `352af7f` 2026-11-27 23:28 fix(ocr): better mixed-language detection and pinned recognition data
@@ -85,12 +86,12 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `46f08ff` 2026-11-27 22:30 feat(text): edit existing text in place, keeping the document's fonts, colours and positions
 - `5ce54d9` 2026-11-27 22:24 fix(viewer): safe document close, 44px size buttons and undo while typing
 - `126fec4` 2026-11-27 22:22 fix(ops): keep stroke state on redaction, order rotated text, quiet export after undo
-- `e74c459` 2026-11-27 22:19 fix(engine): leave internal font names out of the substitution notice
 
 ### Uncommitted changes at refresh time
 
 ```
-M src/engine/fonts/draw.ts
+M  README.md
+ M src/engine/fonts/draw.ts
  M src/engine/fonts/index.ts
  M src/engine/fonts/inspect.ts
  M src/engine/fonts/layout.ts
@@ -102,12 +103,6 @@ M src/engine/fonts/draw.ts
  M src/engine/text/layout.ts
  M src/engine/text/pdffont.ts
  M src/engine/text/rewrite.ts
-M  src/ui/viewer/Viewer.tsx
-M  src/ui/viewer/editor/controller.ts
-M  src/ui/viewer/layers/EditTextLayer.tsx
-M  src/ui/viewer/layers/PlaceLayer.tsx
-M  src/ui/viewer/layers/SelectLayer.tsx
-M  src/ui/viewer/pageData.ts
  M tests/text/mockFonts.ts
 ?? tests/text/fidelity.test.ts
 ```
