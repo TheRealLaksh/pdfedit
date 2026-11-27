@@ -55,12 +55,13 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 <!-- handoff:auto:start -->
 ## Auto: repo state
 
-_Refreshed 27 Nov 2026, 10:07 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
+_Refreshed 27 Nov 2026, 10:18 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
 
 Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `5d86f69` 2026-11-27 22:07 fix(shell): zoom buttons follow the viewer's real fit scale
 - `0be61f4` 2026-11-27 22:06 feat(viewer): virtualised pages, inline text editing and on-page tools
 - `41db324` 2026-11-27 22:06 fix(engine): hold calls until the worker has loaded so an early open cannot hang
 - `c562164` 2026-11-27 21:51 docs: handoff status for operations and shell
@@ -75,17 +76,90 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `0b80a57` 2026-11-27 21:14 feat(engine): content stream tokenizer and page helpers
 - `dacf1be` 2026-11-27 21:14 feat(engine): contract, context and geometry helpers
 - `a7cf22a` 2026-11-27 21:13 docs: readme, module brief and handoff automation
-- `239e715` 2026-11-27 21:13 chore: project setup, tooling and AGPL licence
 
 ### Uncommitted changes at refresh time
 
 ```
-M  HANDOFF.md
+A  playwright.config.ts
  M src/engine/ocr/index.ts
  M src/engine/text/index.ts
  M src/ocr/index.ts
-M  src/ui/shell/TopBar.tsx
-?? playwright.config.ts
+A  tests/fixtures/NOTICE.md
+A  tests/fixtures/assets/FixtureSerif.ttf
+A  tests/fixtures/assets/photo-page.jpg
+A  tests/fixtures/assets/photo.jpg
+A  tests/fixtures/assets/photo.png
+A  tests/fixtures/assets/signature.png
+A  tests/fixtures/gen/chromium_docs.py
+A  tests/fixtures/gen/common.py
+A  tests/fixtures/gen/content.py
+A  tests/fixtures/gen/derived_docs.py
+A  tests/fixtures/gen/fonts.py
+A  tests/fixtures/gen/generate.py
+A  tests/fixtures/gen/raw_docs.py
+A  tests/fixtures/gen/rawpdf.py
+A  tests/fixtures/gen/reportlab_docs.py
+A  tests/fixtures/pdfs/ar-chromium.pdf
+A  tests/fixtures/pdfs/ar-type3.pdf
+A  tests/fixtures/pdfs/bn-chromium.pdf
+A  tests/fixtures/pdfs/bn-type3.pdf
+A  tests/fixtures/pdfs/broken-no-tounicode.pdf
+A  tests/fixtures/pdfs/broken-pua.pdf
+A  tests/fixtures/pdfs/columns-table.pdf
+A  tests/fixtures/pdfs/damaged-truncated.pdf
+A  tests/fixtures/pdfs/damaged-xref.pdf
+A  tests/fixtures/pdfs/el-chromium.pdf
+A  tests/fixtures/pdfs/empty-page.pdf
+A  tests/fixtures/pdfs/en-cff.pdf
+A  tests/fixtures/pdfs/en-chromium.pdf
+A  tests/fixtures/pdfs/en-justified.pdf
+A  tests/fixtures/pdfs/en-standard14.pdf
+A  tests/fixtures/pdfs/en-truetype.pdf
+A  tests/fixtures/pdfs/forms.pdf
+A  tests/fixtures/pdfs/gu-chromium.pdf
+A  tests/fixtures/pdfs/he-chromium.pdf
+A  tests/fixtures/pdfs/hi-chromium.pdf
+A  tests/fixtures/pdfs/hi-type3.pdf
+A  tests/fixtures/pdfs/images.pdf
+A  tests/fixtures/pdfs/ja-chromium.pdf
+A  tests/fixtures/pdfs/ja-vertical-chromium.pdf
+A  tests/fixtures/pdfs/justified-chromium.pdf
+A  tests/fixtures/pdfs/kn-chromium.pdf
+A  tests/fixtures/pdfs/ko-chromium.pdf
+A  tests/fixtures/pdfs/legacy-krutidev.pdf
+A  tests/fixtures/pdfs/manifest.json
+A  tests/fixtures/pdfs/mixed-chromium.pdf
+A  tests/fixtures/pdfs/ml-chromium.pdf
+A  tests/fixtures/pdfs/mr-chromium.pdf
+A  tests/fixtures/pdfs/multipage.pdf
+A  tests/fixtures/pdfs/offset-cropbox.pdf
+A  tests/fixtures/pdfs/or-chromium.pdf
+A  tests/fixtures/pdfs/owner-only.pdf
+A  tests/fixtures/pdfs/pa-chromium.pdf
+A  tests/fixtures/pdfs/password-aes256.pdf
+A  tests/fixtures/pdfs/password-rc4.pdf
+A  tests/fixtures/pdfs/positioning.pdf
+A  tests/fixtures/pdfs/rotated-pages.pdf
+A  tests/fixtures/pdfs/rotated-text.pdf
+A  tests/fixtures/pdfs/ru-chromium.pdf
+A  tests/fixtures/pdfs/scan-ar.pdf
+A  tests/fixtures/pdfs/scan-en.pdf
+A  tests/fixtures/pdfs/scan-hi.pdf
+A  tests/fixtures/pdfs/scan-ru.pdf
+A  tests/fixtures/pdfs/scan-searchable-en.pdf
+A  tests/fixtures/pdfs/scan-ta.pdf
+A  tests/fixtures/pdfs/scan-zh.pdf
+A  tests/fixtures/pdfs/shared-content.pdf
+A  tests/fixtures/pdfs/signed-simulated.pdf
+A  tests/fixtures/pdfs/story-multiscript.pdf
+A  tests/fixtures/pdfs/ta-chromium.pdf
+A  tests/fixtures/pdfs/table-chromium.pdf
+A  tests/fixtures/pdfs/te-chromium.pdf
+A  tests/fixtures/pdfs/th-chromium.pdf
+A  tests/fixtures/pdfs/type3-latin.pdf
+A  tests/fixtures/pdfs/ur-chromium.pdf
+A  tests/fixtures/pdfs/xobject-shared.pdf
+A  tests/fixtures/pdfs/zh-chromium.pdf
 ?? src/engine/ocr/edit.ts
 ?? src/engine/ocr/fit.ts
 ?? src/engine/ocr/ink.ts
@@ -115,7 +189,6 @@ M  src/ui/shell/TopBar.tsx
 ?? src/ocr/preprocess.ts
 ?? src/ocr/tess.ts
 ?? tests/e2e/
-?? tests/fixtures/
 ?? tests/integration/
 ?? tests/ocr/
 ?? tests/text/

@@ -1,0 +1,57 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+2 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Times-Roman /Encoding /WinAnsiEncoding >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Type /Sig /Filter /Adobe.PPKLite /SubFilter /adbe.pkcs7.detached /ByteRange [0 0 0 0] /Contents <00> /Reason (Synthetic test fixture, not a real signature) >>
+endobj
+6 0 obj
+<< /Type /Pages /Kids [7 0 R] /Count 1 /Resources << /Font << /F1 1 0 R /F2 2 0 R /F3 3 0 R /F4 4 0 R >>  >> >>
+endobj
+7 0 obj
+<< /Type /Page /Parent 6 0 R /MediaBox [0 0 420 595] /Contents 9 0 R /Annots [8 0 R] >>
+endobj
+8 0 obj
+<< /Type /Annot /Subtype /Widget /FT /Sig /T (signature1) /Rect [40 380 200 420] /F 132 /V 5 0 R /P 7 0 R >>
+endobj
+9 0 obj
+<< /Length 76  /Filter /FlateDecode >>
+stream
+x⁄¡ÀÄ @¡VﬁQOÇüL¥ÇmÄ¿¢≈∞gVaÿ-vB"≥aË‰Lï˙Ô—‹Æî§GMGvÌ+JLzáπÿ‰ºÎç
+endstream
+endobj
+10 0 obj
+<< /Type /Catalog /Pages 6 0 R /AcroForm << /Fields [8 0 R] /SigFlags 3 >> >>
+endobj
+11 0 obj
+<< /Producer (pdfedit fixture generator) /CreationDate (D:20200101000000Z) /ModDate (D:20200101000000Z) /Title (Signed fixture) >>
+endobj
+xref
+0 12
+0000000000 65535 f 
+0000000015 00000 n 
+0000000112 00000 n 
+0000000211 00000 n 
+0000000306 00000 n 
+0000000408 00000 n 
+0000000586 00000 n 
+0000000713 00000 n 
+0000000816 00000 n 
+0000000940 00000 n 
+0000001088 00000 n 
+0000001182 00000 n 
+trailer
+<< /Size 12 /Root 10 0 R /Info 11 0 R >>
+startxref
+1329
+%%EOF
