@@ -1,9 +1,9 @@
 /** The edit-text tool: every line of the page is a tap target. */
 import { useRef, useState, type MouseEvent } from "react";
 import { useStore } from "../../../store";
-import { editLineAt, editors } from "../editor/controller";
+import { cancelQueuedTap, editLineAt, editLineWhenReady, editors, isReady } from "../editor/controller";
 import { nearestLine, quadPoints } from "../geometry";
-import { usePageData } from "../pageData";
+import { peekPageData, usePageData } from "../pageData";
 import { pagePoint } from "./pointer";
 
 export function EditTextLayer({ page, width, height, scale }: { page: number; width: number; height: number; scale: number }) {
@@ -30,13 +30,24 @@ export function EditTextLayer({ page, width, height, scale }: { page: number; wi
       // keep the focus in the open editor: the click decides what happens next
       onMouseDown={(e) => useStore.getState().editing && e.preventDefault()}
       onClick={(e) => {
-        const line = lineAt(e);
-        if (line) {
-          editLineAt(page, line, pagePoint(e, e.currentTarget, width, height));
+        const at = pagePoint(e, e.currentTarget, width, height);
+        // the boxes on screen may be from before the last save: answer when the new text is in
+        if (!isReady(page, "text")) {
+          editors.current?.commit();
+          // open the keyboard only if there seems to be text under the finger
+          const likely = !last || !!nearestLine(last.lines, at, scale, touch.current);
+          editLineWhenReady(page, at, scale, touch.current, likely);
           return;
         }
+        const text = peekPageData("text", page)!;
+        const line = nearestLine(text.lines, at, scale, touch.current);
+        if (line) {
+          editLineAt(page, line, at);
+          return;
+        }
+        cancelQueuedTap();
         if (editors.current) editors.current.commit();
-        else if (data && !data.lines.length && data.kind === "empty")
+        else if (!text.lines.length && text.kind === "empty")
           useStore.getState().toast("There is no text on this page. Use Add text to write on it.");
       }}
     >

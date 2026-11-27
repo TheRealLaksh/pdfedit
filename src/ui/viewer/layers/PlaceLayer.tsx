@@ -2,7 +2,7 @@
 import { useState, type MouseEvent } from "react";
 import type { NewPageObject, Point, Rect } from "../../../engine/types";
 import { useStore, type Placement } from "../../../store";
-import { addTextAt, editors, editTextObject } from "../editor/controller";
+import { addTextAt, editors, editTextObject, isReady, whenReady } from "../editor/controller";
 import { hitObject, rgbToHex, smoothPath } from "../geometry";
 import { peekPageData, usePageData } from "../pageData";
 import { addGhost, removeGhost, type NewGhost } from "../viewerStore";
@@ -18,13 +18,18 @@ export function AddTextLayer({ page, width, height, scale }: { page: number; wid
       onMouseDown={(e) => useStore.getState().editing && e.preventDefault()}
       onClick={(e) => {
         const at = pagePoint(e, e.currentTarget, width, height);
-        const existing = [...(peekPageData("objects", page) ?? [])]
-          .reverse()
-          .find((o) => o.kind === "text" && hitObject(o, at, 8 / scale));
-        if (existing) return editTextObject(page, existing.id);
-        // tapping away from a box with text in it only saves it
+        const answer = () => {
+          const existing = [...(peekPageData("objects", page) ?? [])]
+            .reverse()
+            .find((o) => o.kind === "text" && hitObject(o, at, 8 / scale));
+          if (existing) return editTextObject(page, existing.id);
+          // tapping away from a box with text in it only saves it
+          if (editors.current?.commit()) return;
+          addTextAt(page, at);
+        };
+        if (isReady(page, "objects")) return answer();
         if (editors.current?.commit()) return;
-        addTextAt(page, at);
+        whenReady(page, ["objects"], answer, true);
       }}
     />
   );

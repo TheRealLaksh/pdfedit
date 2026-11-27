@@ -11,6 +11,8 @@ interface Kinds {
   images: ImageItem[];
 }
 
+export type PageDataKind = keyof Kinds;
+
 const loaders: { [K in keyof Kinds]: (page: number) => Promise<Kinds[K]> } = {
   text: (page) => engine.getPageText(page),
   objects: (page) => engine.listObjects(page),

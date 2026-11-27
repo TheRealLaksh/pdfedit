@@ -2,7 +2,7 @@
 import { useEffect, useRef } from "react";
 import { useStore } from "../../store";
 import { ViewerContext } from "./context";
-import { editors } from "./editor/controller";
+import { cancelQueuedTap, editors } from "./editor/controller";
 import { boundsOf, quadPoints, rectCentre } from "./geometry";
 import { ActionOverlay, PageNotice } from "./Overlays";
 import { PageView } from "./PageView";
@@ -70,6 +70,7 @@ export function Viewer() {
         }
         return;
       }
+      cancelQueuedTap();
       editors.current?.commit();
       void flushInk();
     };
@@ -164,6 +165,7 @@ export function Viewer() {
           onClick={(e) => {
             // a tap on the empty space around the pages
             if (e.target !== e.currentTarget && e.target !== content.current) return;
+            cancelQueuedTap();
             editors.current?.commit();
             useStore.getState().select(null);
           }}

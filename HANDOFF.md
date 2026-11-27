@@ -65,12 +65,13 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 <!-- handoff:auto:start -->
 ## Auto: repo state
 
-_Refreshed 27 Nov 2026, 11:28 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
+_Refreshed 27 Nov 2026, 11:33 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
 
 Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `4dd84e0` 2026-11-27 23:28 test: desktop and back-navigation browser tests
 - `41fa302` 2026-11-27 23:28 fix(shell): desktop and back-navigation fixes, restriction and XFA notices
 - `352af7f` 2026-11-27 23:28 fix(ocr): better mixed-language detection and pinned recognition data
 - `31c2352` 2026-11-27 23:28 fix(ops): guard hostile documents and keep list box highlights
@@ -85,7 +86,6 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `5ce54d9` 2026-11-27 22:24 fix(viewer): safe document close, 44px size buttons and undo while typing
 - `126fec4` 2026-11-27 22:22 fix(ops): keep stroke state on redaction, order rotated text, quiet export after undo
 - `e74c459` 2026-11-27 22:19 fix(engine): leave internal font names out of the substitution notice
-- `83b812e` 2026-11-27 22:18 test: integration and browser test suites
 
 ### Uncommitted changes at refresh time
 
@@ -102,14 +102,12 @@ M src/engine/fonts/draw.ts
  M src/engine/text/layout.ts
  M src/engine/text/pdffont.ts
  M src/engine/text/rewrite.ts
- M src/ui/viewer/Viewer.tsx
- M src/ui/viewer/editor/controller.ts
- M src/ui/viewer/layers/EditTextLayer.tsx
- M src/ui/viewer/layers/PlaceLayer.tsx
- M src/ui/viewer/layers/SelectLayer.tsx
- M src/ui/viewer/pageData.ts
-A  tests/e2e/back.spec.ts
-A  tests/e2e/desktop.spec.ts
+M  src/ui/viewer/Viewer.tsx
+M  src/ui/viewer/editor/controller.ts
+M  src/ui/viewer/layers/EditTextLayer.tsx
+M  src/ui/viewer/layers/PlaceLayer.tsx
+M  src/ui/viewer/layers/SelectLayer.tsx
+M  src/ui/viewer/pageData.ts
  M tests/text/mockFonts.ts
 ?? tests/text/fidelity.test.ts
 ```

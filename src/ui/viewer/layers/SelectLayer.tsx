@@ -6,10 +6,10 @@ import type { ImageItem, PageObject, Point, Rect } from "../../../engine/types";
 import { useStore, type Selection } from "../../../store";
 import { ViewerContext } from "../context";
 import { useCompact } from "../device";
-import { editTextObject } from "../editor/controller";
+import { editTextObject, isReady, whenReady } from "../editor/controller";
 import { hitObject, insideRect, rectCentre, rectH, rectW, resizeRect, withRect, type Handle } from "../geometry";
 import { snapshot } from "../canvasRegistry";
-import { usePageData } from "../pageData";
+import { peekPageData, usePageData } from "../pageData";
 import { pagePoint } from "./pointer";
 
 type Item = { type: "object"; object: PageObject } | { type: "image"; image: ImageItem };
@@ -117,9 +117,9 @@ export function SelectLayer({ page, width, height, scale, interactive }: {
   }
 
   const pick = (at: Point): Selection => {
-    const object = [...(objects.data ?? [])].reverse().find((o) => hitObject(o, at, 10 / scale));
+    const object = [...(peekPageData("objects", page) ?? [])].reverse().find((o) => hitObject(o, at, 10 / scale));
     if (object) return { type: "object", page, id: object.id };
-    const image = (images.data ?? [])
+    const image = (peekPageData("images", page) ?? [])
       .filter((i) => insideRect(i.rect, at, 4 / scale))
       .sort((a, b) => rectW(a.rect) * rectH(a.rect) - rectW(b.rect) * rectH(b.rect))[0];
     return image ? { type: "image", page, id: image.id } : null;
@@ -131,10 +131,15 @@ export function SelectLayer({ page, width, height, scale, interactive }: {
         <div
           className="pv-layer"
           data-testid="select-layer"
-          onClick={(e) => useStore.getState().select(pick(pagePoint(e, e.currentTarget, width, height)))}
+          onClick={(e) => {
+            const at = pagePoint(e, e.currentTarget, width, height);
+            const answer = () => useStore.getState().select(pick(at));
+            if (isReady(page, "objects", "images")) answer();
+            else whenReady(page, ["objects", "images"], answer, false);
+          }}
           onDoubleClick={(e) => {
             const hit = pick(pagePoint(e, e.currentTarget, width, height));
-            if (hit?.type === "object" && objects.data?.find((o) => o.id === hit.id)?.kind === "text")
+            if (hit?.type === "object" && peekPageData("objects", page)?.find((o) => o.id === hit.id)?.kind === "text")
               editTextObject(page, hit.id);
           }}
         />
