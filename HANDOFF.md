@@ -22,33 +22,37 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 - `tests/` fixtures, unit, integration, e2e
 
 ## Status
-- 27 Nov 2026: scaffold and contracts done; module build by 7 parallel agents running.
-- FONTS landed: about 40 scripts shaped and embedded, 83 tests pass. Limits: no WOFF/CFF2, emoji monochrome.
-- OPS landed (127 tests) and SHELL landed (start screen, panels, PWA). Never `saveToBuffer` the live engine doc:
-  it corrupts undo (ops copies objects instead, `ops/clone.ts`).
-- SHELL not verified: real devices / iOS keyboard, touch drag-reorder, user-font upload, SW update across deploys.
-- VIEWER landed, checked in Chromium and WebKit emulation; no real-device keyboard test, no unit tests.
-  Wanted: one-step undo for multi-line highlight / multi-page redaction.
-- TEXT landed: 709/709 integration + text tests; corpus extraction 407/411 lines exact. Limits: no paragraph
-  reflow, search stops at line breaks, 21k-glyph pages take 290-700 ms, stacked vertical CJK loses typed spaces.
-- TESTS landed: 60-file multi-language corpus, integration and Playwright e2e suites.
-- OCR landed: 122 languages; scanned text is covered (not erased) when replaced; Telugu/Kannada/Malayalam/Urdu
-  recognise at about 82-91%.
-- All 7 modules integrated: 1040 vitest tests pass, typecheck clean. Next: second-round testing agents.
-- Cloudflare Pages project `pdfedit` (https://pdfedit-177.pages.dev) created with `wrangler pages project
-  create --force` (plain create now tries Workers); first deploy done; custom domain added in the dashboard
-  (CNAME pdfedit to pdfedit-177.pages.dev). No git auto-deploy: deploy with `npm run deploy`.
-- Cross-module couplings to keep: hidden text-layer line ids end ".h"; ops reads OCR `edits.__page`,
-  `patch.object`, `textForm`; `text/fallback.ts` and `ocr/edit.ts` import `ops/redactContent.ts`.
+- 28 Nov 2026: **live** at https://pdfedit.lakshpradhwani.com (Cloudflare Pages, project `pdfedit`).
+- Built by 7 module agents, then tested and fixed by 4 QA agents (desktop, phone, multilingual fidelity,
+  robustness/security).
+- Checks on the merged code: typecheck clean; 1088 vitest pass (1 skipped); Playwright 273 pass, 36 skipped,
+  0 failed on desktop + Pixel 7 + iPhone emulation, both on a local build and against the live site. Offline
+  open verified on the live site.
+- Not verified: any real phone or tablet, real scanner output, LaTeX / LibreOffice documents.
+
+### Known limits
+- No paragraph reflow; longer text can overrun cells or columns. Search does not cross line breaks.
+- Substitute fonts can look different (other than Arial/Times metric twins), notably CJK vs SimSun / Yu Gothic.
+- Re-reading or re-editing can be unreliable after whole-line rewrites in Arabic, Hebrew, Urdu Nastaliq and
+  some Word Indic/Thai files; some PyMuPDF htmlbox lines are read-only or ask for OCR.
+- Replaced scan text is covered, not erased. Telugu/Kannada/Malayalam/Urdu OCR about 82-91%.
+- Lines over 1500 glyphs are read-only. Owner-restricted PDFs open with a warning; export drops the restriction.
+- XFA forms show only partly. No SRI on the two pinned tesseract scripts from jsDelivr.
+
+### Deploy notes
+- `npm run deploy`. `public/_headers` keeps `no-transform` on the page only: without it Cloudflare injects
+  analytics and challenge scripts (blocked by the CSP); on assets it would switch compression off.
+- Change the CSP script paths together with `TESSERACT_VERSION`.
+- Cross-module couplings: hidden text-layer line ids end ".h"; ops reads OCR `edits.__page`, `patch.object`,
+  `textForm`; `text/fallback.ts` and `ocr/edit.ts` import `ops/redactContent.ts`. Never `saveToBuffer` the live
+  engine document (breaks undo).
 
 ## Next steps
-1. Build the 7 modules (TEXT, FONTS, OCR, OPS, VIEWER, SHELL, TESTS).
-2. Integrate, then 3-4 testing agents; fix findings.
-3. Deploy to Cloudflare Pages, attach pdfedit.lakshpradhwani.com, verify live.
-4. Email the summary and URL to work@lakshpradhwani.com (Laksh asked for this on 27 Nov).
+1. Laksh: try it on your own phone with real documents (keyboard behaviour above all) and note what looks off.
+2. Optional: self-host tesseract scripts; paragraph reflow; one-step undo for multi-line highlight/redaction.
 
 ## Open questions / waiting on others
-- None. Laksh is away and gave full authority to finish (27 Nov).
+- Keep, or block, editing of owner-restricted PDFs (today: warn and allow)?
 
 ## Decisions not to undo
 - Engine MuPDF (AGPL), so the repo is public. OCR is free, in-browser only (no paid APIs).
@@ -60,17 +64,19 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 - Small commits, pushed after each (Laksh, 27 Nov session only; ask again next session).
 
 ## Session log
+- 2026-11-28: QA round merged, all checks green, deployed, live site verified, Cloudflare script injection fixed.
 - 2026-11-27: Q&A with Laksh, repo created, scaffold + contracts written, agents dispatched.
 
 <!-- handoff:auto:start -->
 ## Auto: repo state
 
-_Refreshed 28 Nov 2026, 12:02 am IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
+_Refreshed 28 Nov 2026, 12:13 am IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
 
 Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `1969f44` 2026-11-28 00:02 fix(deploy): stop Cloudflare injecting scripts into the page without losing compression
 - `fa2f5dd` 2026-11-27 23:48 chore: deploy with wrangler through npx
 - `052057d` 2026-11-27 23:41 fix(text): spacing, layered and mixed-style fidelity, readable re-extraction and long lines
 - `74f6157` 2026-11-27 23:33 docs: describe features and limits
@@ -85,12 +91,10 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `e3f850d` 2026-11-27 22:42 docs: record Cloudflare Pages project and domain
 - `c2c020b` 2026-11-27 22:37 fix(engine): record an undo step only when the document changed
 - `e6302e6` 2026-11-27 22:37 feat(ocr): in-browser recognition and native-looking edits on scanned pages
-- `8982559` 2026-11-27 22:30 docs: handoff status for text and tests
 
 ### Uncommitted changes at refresh time
 
 ```
-M  public/_headers
-M  vite.config.ts
+M  HANDOFF.md
 ```
 <!-- handoff:auto:end -->
