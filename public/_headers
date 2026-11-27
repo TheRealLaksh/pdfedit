@@ -7,5 +7,13 @@
   Strict-Transport-Security: max-age=31536000
   Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/ https://cdn.jsdelivr.net/npm/tesseract.js-core@7.0.0/; worker-src 'self' blob:; connect-src 'self' https://cdn.jsdelivr.net/npm/ data: blob:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' https://cdn.jsdelivr.net/npm/ data: blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
 
+# no-transform on the page only: it stops Cloudflare injecting analytics or challenge scripts.
+# (On other files it would also switch compression off.)
+/
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
+
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
+
 /assets/*
   Cache-Control: public, max-age=31536000, immutable

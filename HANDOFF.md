@@ -65,12 +65,13 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 <!-- handoff:auto:start -->
 ## Auto: repo state
 
-_Refreshed 27 Nov 2026, 11:48 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
+_Refreshed 28 Nov 2026, 12:02 am IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
 
 Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `fa2f5dd` 2026-11-27 23:48 chore: deploy with wrangler through npx
 - `052057d` 2026-11-27 23:41 fix(text): spacing, layered and mixed-style fidelity, readable re-extraction and long lines
 - `74f6157` 2026-11-27 23:33 docs: describe features and limits
 - `a4598bd` 2026-11-27 23:33 fix(viewer): keep a tap made while a change is saving
@@ -85,11 +86,11 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `c2c020b` 2026-11-27 22:37 fix(engine): record an undo step only when the document changed
 - `e6302e6` 2026-11-27 22:37 feat(ocr): in-browser recognition and native-looking edits on scanned pages
 - `8982559` 2026-11-27 22:30 docs: handoff status for text and tests
-- `46f08ff` 2026-11-27 22:30 feat(text): edit existing text in place, keeping the document's fonts, colours and positions
 
 ### Uncommitted changes at refresh time
 
 ```
-M  package.json
+M  public/_headers
+M  vite.config.ts
 ```
 <!-- handoff:auto:end -->
