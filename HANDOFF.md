@@ -32,6 +32,11 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 - TEXT landed: 709/709 integration + text tests; corpus extraction 407/411 lines exact. Limits: no paragraph
   reflow, search stops at line breaks, 21k-glyph pages take 290-700 ms, stacked vertical CJK loses typed spaces.
 - TESTS landed: 60-file multi-language corpus, integration and Playwright e2e suites.
+- OCR landed: 122 languages; scanned text is covered (not erased) when replaced; Telugu/Kannada/Malayalam/Urdu
+  recognise at about 82-91%.
+- All 7 modules integrated: 1040 vitest tests pass, typecheck clean. Next: second-round testing agents.
+- Cross-module couplings to keep: hidden text-layer line ids end ".h"; ops reads OCR `edits.__page`,
+  `patch.object`, `textForm`; `text/fallback.ts` and `ocr/edit.ts` import `ops/redactContent.ts`.
 
 ## Next steps
 1. Build the 7 modules (TEXT, FONTS, OCR, OPS, VIEWER, SHELL, TESTS).
@@ -57,12 +62,13 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 <!-- handoff:auto:start -->
 ## Auto: repo state
 
-_Refreshed 27 Nov 2026, 10:30 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
+_Refreshed 27 Nov 2026, 10:37 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
 
 Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `8982559` 2026-11-27 22:30 docs: handoff status for text and tests
 - `46f08ff` 2026-11-27 22:30 feat(text): edit existing text in place, keeping the document's fonts, colours and positions
 - `5ce54d9` 2026-11-27 22:24 fix(viewer): safe document close, 44px size buttons and undo while typing
 - `126fec4` 2026-11-27 22:22 fix(ops): keep stroke state on redaction, order rotated text, quiet export after undo
@@ -77,28 +83,32 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `942591c` 2026-11-27 21:50 feat(shell): design tokens, app icons and PWA assets
 - `8e1236b` 2026-11-27 21:50 fix(store): stay busy until overlapping calls all finish
 - `02ee33c` 2026-11-27 21:50 feat(ops): added objects, images, forms, page tools, redaction and export
-- `9c783bf` 2026-11-27 21:49 fix(engine): drop MuPDF's font cache after every mutation, undo and redo
 
 ### Uncommitted changes at refresh time
 
 ```
-M  HANDOFF.md
- M src/engine/ocr/index.ts
- M src/ocr/index.ts
-?? src/engine/ocr/edit.ts
-?? src/engine/ocr/fit.ts
-?? src/engine/ocr/ink.ts
-?? src/engine/ocr/pdf.ts
-?? src/engine/ocr/recognised.ts
-?? src/engine/ocr/searchable.ts
-?? src/engine/ocr/state.ts
-?? src/engine/ocr/style.ts
-?? src/engine/ocr/textlayer.ts
-?? src/ocr/convert.ts
-?? src/ocr/detect.ts
-?? src/ocr/languages.ts
-?? src/ocr/preprocess.ts
-?? src/ocr/tess.ts
-?? tests/ocr/
+M HANDOFF.md
+ M src/engine/engine.ts
+A  src/engine/ocr/edit.ts
+A  src/engine/ocr/fit.ts
+M  src/engine/ocr/index.ts
+A  src/engine/ocr/ink.ts
+A  src/engine/ocr/pdf.ts
+A  src/engine/ocr/recognised.ts
+A  src/engine/ocr/searchable.ts
+A  src/engine/ocr/state.ts
+A  src/engine/ocr/style.ts
+A  src/engine/ocr/textlayer.ts
+A  src/ocr/convert.ts
+A  src/ocr/detect.ts
+M  src/ocr/index.ts
+A  src/ocr/languages.ts
+A  src/ocr/preprocess.ts
+A  src/ocr/tess.ts
+A  tests/ocr/document.test.ts
+A  tests/ocr/engine.test.ts
+A  tests/ocr/helpers.ts
+A  tests/ocr/integrated.test.ts
+A  tests/ocr/recognize.test.ts
 ```
 <!-- handoff:auto:end -->
