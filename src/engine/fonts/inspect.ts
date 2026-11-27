@@ -30,6 +30,10 @@ function inspectSfnt(face: Face): FontInspection {
     glyphForUnicode: (cp) => face.glyph(cp),
     hasGlyphOutline: (gid) => gid >= 0 && (!count || gid < count) && (spaces.has(gid) || face.hasOutline(gid)),
     advance: (gid) => face.hbFont.glyphHAdvance(gid),
+    ink: (gid) => {
+      const e = face.hbFont.glyphExtents(gid);
+      return e && e.height ? [e.yBearing, e.yBearing + e.height] : null;
+    },
   };
 }
 

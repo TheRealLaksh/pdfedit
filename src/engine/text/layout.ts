@@ -10,6 +10,7 @@ import {
   isLegacyFont,
   isMarkOnly,
   NOSPACE_SCRIPT,
+  isComplex,
   normalizeGlyphText,
   reorderIndic,
   visualToLogical,
@@ -68,6 +69,12 @@ export interface LineModel {
   block: { left: number; right: number };
   /** upright characters stacked into a column: where a glyph's origin lies inside its cell, along the line */
   stacked?: number;
+  /** extra space after every letter of a tracked line, as a fraction of the font size */
+  tracking: number;
+  /** letters step down along each word (Nastaliq): new text goes on the line's baseline, not beside them */
+  cascade?: boolean;
+  /** cut from an extremely long line */
+  tooLong?: boolean;
 }
 
 interface Entry {
@@ -84,23 +91,86 @@ interface Segment {
   entries: Entry[];
   v: number;
   size: number;
+  /** a piece of a line too long to be one editable line */
+  long?: boolean;
 }
+
+/**
+ * No real line of text comes near this many glyphs. Longer ones (generated or hostile files) are cut into
+ * pieces, which keeps reading a page close to linear, and are not offered for editing.
+ */
+const MAX_LINE = 1500;
+/** how far the alignment and overlap searches look along their sorted lists */
+const NEIGHBOURS = 200;
 
 export const toFrame = (p: Point, ex: Point, ey: Point): Point => [p[0] * ex[0] + p[1] * ex[1], p[0] * ey[0] + p[1] * ey[1]];
 export const fromFrame = (u: number, v: number, ex: Point, ey: Point): Point => [u * ex[0] + v * ey[0], u * ex[1] + v * ey[1]];
 
+/** largest size, relative to its host, of a superscript or subscript (browsers use 1/1.2) */
+const SCRIPT_SIZE = 0.845;
+
 const isBlank = (g: Glyph) => !g.actual && g.unicode !== "" && g.unicode.trim() === "";
+/**
+ * Word processors write some Arabic ligatures as one wide glyph for the first letter and an empty one,
+ * placed inside it and often off the baseline, for the second: that one belongs to its carrier.
+ */
+const tails = new WeakMap<Glyph, Glyph>();
+function findTails(glyphs: Glyph[]): void {
+  for (let i = 0; i < glyphs.length; i++) {
+    const g = glyphs[i]!;
+    if (Math.abs(g.width) >= 0.06 * g.size || !/[\u0620-\u06FF]/.test(g.unicode) || !/\p{L}/u.test(g.unicode)) continue;
+    // the carrier is a neighbour in the content, possibly with a space written in between
+    for (const step of [-1, -2, 1, 2, -3, 3]) {
+      const carrier = glyphs[i + step];
+      if (!carrier || !carrier.unicode.trim() || carrier.width < 0.15 * g.size) continue;
+      const dx = g.origin[0] - carrier.origin[0];
+      const dy = g.origin[1] - carrier.origin[1];
+      const along = dx * g.dir[0] + dy * g.dir[1];
+      const across = Math.abs(dy * g.dir[0] - dx * g.dir[1]);
+      // on the baseline such a letter has its own place in the order; only displaced ones need a carrier
+      if (along > -0.05 * g.size && along < carrier.width + 0.05 * g.size && across > 0.06 * g.size && across < 0.5 * g.size) {
+        tails.set(g, carrier);
+        break;
+      }
+    }
+  }
+}
+
 const isMark = (g: Glyph) =>
+  tails.has(g) ||
   !/^.\u094D$|^.\u09CD$|^.\u0ACD$|^.\u0B4D$/.test(g.unicode) &&
   // zero width letters (the second half of a split ligature) keep their own place in the order
   ((Math.abs(g.w) < 0.06 && !/\p{L}/u.test(g.unicode)) || (g.unicode !== "" && isMarkOnly(g.unicode) && Math.abs(g.w) < 0.35));
 const emOf = (g: Glyph) => g.unit * Math.abs(g.show.size * g.show.th * g.show.font.emScale) || g.size || 1;
 
-export function buildLines(page: number, interp: Interpretation, glyphs: Glyph[]): LineModel[] {
+/** vowel signs that are painted before the consonant they follow */
+const PRE_BASE = /^[\u093F\u09BF\u09C7\u09C8\u0A3F\u0ABF\u0B47\u0BC6-\u0BC8\u0D46-\u0D48\u0DD9\u0DDB\u17C1-\u17C3]/;
+/** scripts of India and Southeast Asia */
+const SHAPED = /[\u0900-\u0EFF\u1000-\u109F\u1780-\u17FF]/;
+
+/** the Unicode block (of 128) of a shaped script's character, -1 for anything else */
+const blockOf = (text: string) => {
+  const at = text.search(SHAPED);
+  return at < 0 ? -1 : text.charCodeAt(at) >> 7;
+};
+
+export function buildLines(page: number, interp: Interpretation, glyphs: Glyph[], typed = false): LineModel[] {
   const models: LineModel[] = [];
   const spanCount = new Map<MarkedContent, number>();
   for (const g of interp.glyphs) if (g.actual) spanCount.set(g.actual, (spanCount.get(g.actual) ?? 0) + 1);
 
+  findTails(interp.glyphs);
+  // a word starting with such a sign shows that this script's glyphs are labelled in painting order
+  const painted = new Set(
+    interp.glyphs
+      .filter((g, i) => PRE_BASE.test(g.unicode) && g.width > 0 && (i === 0 || !interp.glyphs[i - 1]!.unicode.trim()))
+      .map((g) => blockOf(g.unicode)),
+  );
+  // text with a replacement string (such as text written by this editor) says its own order
+  const typingOrder = (entries: Entry[]) =>
+    typed &&
+    entries.some((e) => !e.g.actual && SHAPED.test(e.g.unicode)) &&
+    !entries.some((e) => !e.g.actual && painted.has(blockOf(e.g.unicode)));
   // the page's own reading direction settles lines that could be read either way
   let rtl = 0;
   let ltr = 0;
@@ -132,8 +202,17 @@ export function buildLines(page: number, interp: Interpretation, glyphs: Glyph[]
         }
       }
     }
+    const cascading = cascades(entries);
+    if (cascading.length) {
+      const used = new Set(cascading.flatMap((runs) => runs.flatMap((r) => r.visual)));
+      entries = entries.filter((e) => !used.has(e));
+      for (const runs of cascading) {
+        const model = buildCascade(page, runs, ex, ey, angle, shadows);
+        if (model) models.push(model);
+      }
+    }
     for (const segment of segments(entries, interp, ex, ey)) {
-      const model = buildLine(page, segment, ex, ey, angle, shadows, spanCount, prior);
+      const model = buildLine(page, segment, ex, ey, angle, shadows, spanCount, prior, typingOrder);
       if (model) models.push(model);
     }
   }
@@ -185,15 +264,23 @@ function removeShadows(entries: Entry[], shadows: Map<Glyph, Glyph[]>): Entry[] 
   const grid = new Map<string, Entry[]>();
   const dropped = new Set<Entry>();
   for (const e of entries) {
-    const cell = (du: number, dv: number) => `${Math.round(e.u / 4) + du},${Math.round(e.v / 4) + dv}`;
+    // microscopic text needs finer cells, or thousands of glyphs share one
+    const step = e.size < 1 ? Math.max(e.size, 1e-4) : 4;
+    const cell = (du: number, dv: number) => `${Math.round(e.u / step) + du},${Math.round(e.v / step) + dv}`;
     let twin: Entry | null = null;
     for (let du = -1; du <= 1 && !twin; du++)
       for (let dv = -1; dv <= 1 && !twin; dv++)
-        for (const o of grid.get(cell(du, dv)) ?? []) {
+        for (const [index, o] of (grid.get(cell(du, dv)) ?? []).entries()) {
+          // browsers outline text by painting the same letters again from a second font
+          const exact =
+            !!e.g.unicode.trim() &&
+            o.g.unicode === e.g.unicode &&
+            o.g.invisible === e.g.invisible &&
+            Math.abs(o.u - e.u) < 0.02 * e.size &&
+            Math.abs(o.v - e.v) < 0.02 * e.size;
           if (
             !dropped.has(o) &&
-            o.g.code.code === e.g.code.code &&
-            o.g.show.font === e.g.show.font &&
+            (exact || (o.g.code.code === e.g.code.code && o.g.show.font === e.g.show.font)) &&
             o.g.show !== e.g.show &&
             Math.abs(o.size - e.size) < 0.08 * e.size &&
             Math.abs(o.u - e.u) < 0.11 * e.size &&
@@ -201,12 +288,17 @@ function removeShadows(entries: Entry[], shadows: Map<Glyph, Glyph[]>): Entry[] 
             Math.abs(o.w - e.w) < 0.15 * e.size
           ) {
             twin = o;
+            // it can never be matched again: drop it so that heavily overprinted spots stay cheap
+            grid.get(cell(du, dv))!.splice(index, 1);
             break;
           }
         }
     if (twin) {
       dropped.add(twin);
-      shadows.set(e.g, [twin.g, ...(shadows.get(twin.g) ?? [])]);
+      // the list is handed on rather than copied, however often a glyph is painted over
+      const copies = shadows.get(twin.g) ?? [];
+      copies.push(twin.g);
+      shadows.set(e.g, copies);
       shadows.delete(twin.g);
     }
     const key = cell(0, 0);
@@ -239,7 +331,7 @@ function stackedColumns(entries: Entry[]): Entry[][] {
   let column: Entry[] = [];
   const flush = () => {
     const eastAsian = column.filter((e) => CJK.test(e.g.unicode)).length;
-    if (eastAsian >= 3 && eastAsian * 2 > column.length) out.push(column);
+    if (eastAsian >= 3 && eastAsian * 2 > column.length && column.length <= MAX_LINE) out.push(column);
     column = [];
   };
   let i = 0;
@@ -289,6 +381,114 @@ function buildColumn(page: number, column: Entry[], shadows: Map<Glyph, Glyph[]>
   });
   const model = assemble(page, units, [], { entries, v: entries[0]!.v, size }, ex, ey, Math.PI / 2, shadows);
   if (model) model.stacked = lift;
+  return model;
+}
+
+/** a marked right to left run; its content order is the reading order, forwards or backwards */
+interface Cascade {
+  /** left to right */
+  visual: Entry[];
+  segment: Segment;
+  left: number;
+  right: number;
+}
+
+/**
+ * Right to left runs whose letters sit at very different heights (Nastaliq) and that are marked as runs:
+ * by browsers (ReversedChars, content order backwards) or by this editor (content order forwards). Their
+ * baselines and positions do not say where a line or a letter belongs, but the content order does.
+ * Runs that continue one another on a baseline are one line.
+ */
+function cascades(entries: Entry[]): Cascade[][] {
+  const runs = new Map<MarkedContent, Entry[]>();
+  for (const e of entries) {
+    const show = e.g.show;
+    // only a mark opened inside the glyph's own text object: text inserted later has its own
+    const mark = show.marked.find(
+      (m) => (m.tag === "ReversedChars" || m.tag === "PEOrder") && m.node === show.node && m.begin > (show.textObject?.bt ?? Infinity),
+    );
+    if (!mark) continue;
+    let list = runs.get(mark);
+    if (!list) runs.set(mark, (list = []));
+    list.push(e);
+  }
+  const found: (Cascade & { stepped: boolean })[] = [];
+  for (const [mark, run] of runs) {
+    const segment = segmentOf(run);
+    const spread = Math.max(...run.map((e) => e.v)) - Math.min(...run.map((e) => e.v));
+    if (run.length > MAX_LINE || spread >= 2.2 * segment.size || !/[؀-ࣿ]/.test(run.map((e) => e.g.actual?.actualText ?? e.g.unicode).join(""))) continue;
+    const visual = run.slice().sort((a, b) => (mark.tag === "PEOrder" ? b.g.seq - a.g.seq : a.g.seq - b.g.seq));
+    const stepped = run.filter((e) => Math.abs(e.v - segment.v) > 0.15 * segment.size).length >= 3;
+    found.push({ visual, segment, stepped, left: Math.min(...run.map((e) => e.u)), right: Math.max(...run.map((e) => e.u + e.w)) });
+  }
+  // long runs first: later ones fill their holes or continue them
+  found.sort((a, b) => b.visual.length - a.visual.length);
+  const lines: (typeof found)[] = [];
+  const pending = found.slice();
+  while (pending.length) {
+    const run = pending.shift()!;
+    const line = lines.find((list) => {
+      const size = Math.max(list[0]!.segment.size, run.segment.size);
+      if (Math.abs(list[0]!.segment.v - run.segment.v) >= 0.5 * size) return false;
+      const left = Math.min(...list.map((r) => r.left));
+      const right = Math.max(...list.map((r) => r.right));
+      if (run.left - right > 1.1 * size || left - run.right > 1.1 * size) return false;
+      // it must not be printed on top of what the line already has
+      let covered = 0;
+      for (const r of list) for (const e of r.visual) covered += Math.max(0, Math.min(run.right, e.u + e.w) - Math.max(run.left, e.u));
+      return covered < 0.5 * (run.right - run.left);
+    });
+    if (line) line.push(run);
+    else lines.push([run]);
+  }
+  // flat runs (Naskh and the like) are read well enough from their positions, and so is a line that
+  // also holds letters outside such runs (another script, or Arabic that is not marked)
+  const inRuns = new Set(found.flatMap((r) => r.visual));
+  const foreign = entries.filter((e) => !inRuns.has(e) && /\p{L}/u.test(e.g.unicode));
+  return lines.filter(
+    (list) =>
+      list.some((r) => r.stepped) &&
+      !foreign.some((e) =>
+        list.some((r) => Math.abs(e.v - r.segment.v) < 0.3 * r.segment.size && e.u < r.right + 1.5 * r.segment.size && e.u + e.w > r.left - 1.5 * r.segment.size),
+      ),
+  );
+}
+
+function buildCascade(page: number, runs: Cascade[], ex: Point, ey: Point, angle: number, shadows: Map<Glyph, Glyph[]>): LineModel | null {
+  const units: Unit[] = [];
+  for (const run of runs) {
+    // one unit per marked letter; glyphs without text (dots) stay with the letter beside them
+    const groups: Entry[][] = [];
+    for (const e of run.visual) {
+      const last = groups[groups.length - 1];
+      if (last && ((e.g.actual && last[0]!.g.actual === e.g.actual) || (!e.g.actual && !e.g.unicode))) last.push(e);
+      else groups.push([e]);
+    }
+    const own = groups.map((g) => {
+      const actual = g.find((e) => e.g.actual)?.g.actual?.actualText;
+      return unitOf(g, actual ?? textOfGlyphs(g.map((e) => e.g)), actual !== undefined);
+    });
+    // the run goes where it sits: before the first unit lying to the right of its middle
+    const middle = (run.left + run.right) / 2;
+    let at = units.findIndex((u) => (u.u0 + u.u1) / 2 > middle);
+    if (at < 0) at = units.length;
+    units.splice(at, 0, ...own);
+  }
+  // gaps between runs that no space glyph fills
+  for (let i = units.length - 1; i > 0; i--) {
+    const a = units[i - 1]!;
+    const b = units[i]!;
+    if (a.text.trim() && b.text.trim() && b.u0 - a.u1 > 0.15 * b.em && !runs.some((r) => r.visual.some((e) => e.g === a.glyphs[0]) && r.visual.some((e) => e.g === b.glyphs[0])))
+      units.splice(i, 0, { ...b, text: " ", glyphs: [], u0: a.u1, u1: b.u0, actual: false });
+  }
+  const blank = (u: Unit) => !u.text.trim();
+  const padding: Glyph[] = [];
+  while (units.length && blank(units[0]!)) padding.push(...units.shift()!.glyphs);
+  while (units.length && blank(units[units.length - 1]!)) padding.push(...units.pop()!.glyphs);
+  if (!units.length) return null;
+  const main = runs.reduce((a, b) => (b.visual.length > a.visual.length ? b : a)).segment;
+  const model = assemble(page, units, padding, { ...main, entries: runs.flatMap((r) => r.visual) }, ex, ey, angle, shadows, true);
+  if (model) model.cascade = true;
   return model;
 }
 
@@ -342,6 +542,7 @@ function segments(entries: Entry[], interp: Interpretation, ex: Point, ey: Point
           !e.g.actual
         );
       });
+      if (!layer && layers.length >= 16) layer = layers[layers.length - 1]!;
       if (!layer) layers.push((layer = { entries: [], end: -Infinity, last: null }));
       layer.entries.push(e);
       if (!isBlank(e.g)) {
@@ -357,7 +558,8 @@ function segments(entries: Entry[], interp: Interpretation, ex: Point, ey: Point
       let size = 0;
       let across = 0;
       const flush = () => {
-        if (seg.length) out.push(segmentOf(seg));
+        if (seg.length > MAX_LINE) for (const part of pieces(seg)) out.push({ ...segmentOf(part), long: true });
+        else if (seg.length) out.push(segmentOf(seg));
         seg = [];
         end = inkEnd = -Infinity;
         spaces = 0;
@@ -411,19 +613,20 @@ function segments(entries: Entry[], interp: Interpretation, ex: Point, ey: Point
   const largest = out[0]?.size ?? 0;
   for (let i = out.length - 1; i >= 0; i--) {
     const small = out[i]!;
-    if (small.size > 0.82 * largest) continue;
+    if (small.size > SCRIPT_SIZE * largest) continue;
     const [a0, a1] = boxes[i]!;
     const k = position.get(i)!;
     search: for (const step of [-1, 1]) {
       for (let j = k + step; j >= 0 && j < byV.length; j += step) {
         const big = out[byV[j]!]!;
         if (Math.abs(big.v - small.v) > 3 * small.size + 40) break;
-        if (big === small || merged.has(big) || small.size > 0.82 * big.size) continue;
+        if (big === small || merged.has(big) || small.size > SCRIPT_SIZE * big.size) continue;
         const dv = small.v - big.v;
         if (dv < -0.65 * big.size || dv > 0.35 * big.size) continue;
         const [b0, b1] = boxes[byV[j]!]!;
         const gap = Math.max(a0 - b1, b0 - a1);
-        if (gap > 0.3 * big.size || gap < -0.5 * small.size) continue;
+        // it sits right beside letters of the host, or in a hole of it, never on top of them
+        if (gap > 0.3 * big.size || !tucksInto(big, a0, a1, small.size)) continue;
         for (const e of small.entries) big.entries.push(e);
         boxes[byV[j]!] = [Math.min(a0, b0), Math.max(a1, b1)];
         merged.add(small);
@@ -478,6 +681,35 @@ function segments(entries: Entry[], interp: Interpretation, ex: Point, ey: Point
     }
   }
   return result;
+}
+
+/** cut at blanks where there are any */
+function pieces(entries: Entry[]): Entry[][] {
+  const out: Entry[][] = [];
+  for (let from = 0; from < entries.length; ) {
+    let to = Math.min(entries.length, from + MAX_LINE);
+    if (to < entries.length)
+      for (let i = to; i > from + MAX_LINE / 2; i--)
+        if (isBlank(entries[i - 1]!.g)) {
+          to = i;
+          break;
+        }
+    out.push(entries.slice(from, to));
+    from = to;
+  }
+  return out;
+}
+
+function tucksInto(host: Segment, a0: number, a1: number, size: number): boolean {
+  let near = false;
+  let covered = 0;
+  for (const e of host.entries) {
+    if (isBlank(e.g)) continue;
+    const overlap = Math.min(a1, e.u + e.w) - Math.max(a0, e.u);
+    if (overlap > 0) covered += overlap;
+    if (overlap > -0.3 * host.size) near = true;
+  }
+  return near && covered <= 0.5 * size;
 }
 
 function segmentOf(entries: Entry[]): Segment {
@@ -548,7 +780,9 @@ function mergeUnits(units: Unit[], text: string): Unit {
 }
 
 const textOfGlyphs = (glyphs: Glyph[]) => {
-  const ordered = glyphs.slice().sort((a, b) => Number(isMarkOnly(a.unicode || "x")) - Number(isMarkOnly(b.unicode || "x")) || a.seq - b.seq);
+  // marks follow their base, the second half of a ligature follows the first wherever it was written
+  const rank = (g: Glyph) => (tails.has(g) ? 1 : isMarkOnly(g.unicode || "x") ? 2 : 0);
+  const ordered = glyphs.slice().sort((a, b) => rank(a) - rank(b) || a.seq - b.seq);
   return ordered.map((g) => (g.unicode ? normalizeGlyphText(g.unicode) : g.filler ? "" : "\uFFFD")).join("");
 };
 
@@ -566,6 +800,13 @@ function visualUnits(segment: Segment, spanCount: Map<MarkedContent, number>): U
   /** marks sitting on a cluster of another ActualText span: they read after it but are not part of it */
   const followers = new Map<Entry[], Entry[]>();
   for (const m of marks) {
+    const carrier = tails.get(m.g);
+    const home = carrier ? clusters.findIndex((c) => c[0]!.g === carrier) : -1;
+    if (home >= 0) {
+      clusters[home]!.push(m);
+      bySeq.set(m.g.seq, home);
+      continue;
+    }
     let best = -1;
     let score = Infinity;
     let other = -1;
@@ -664,7 +905,7 @@ function visualUnits(segment: Segment, spanCount: Map<MarkedContent, number>): U
 
 /** by position; where two clusters start at the same spot the narrower one (a zero width letter) comes first */
 function leftToRight(a: Unit, b: Unit): number {
-  return Math.abs(a.u0 - b.u0) < 0.05 ? a.u1 - a.u0 - (b.u1 - b.u0) : a.u0 - b.u0;
+  return Math.abs(a.u0 - b.u0) < Math.max(0.05, 0.012 * Math.min(a.size, b.size)) ? a.u1 - a.u0 - (b.u1 - b.u0) : a.u0 - b.u0;
 }
 
 /** distribute the replacement text of a (possibly large) ActualText span over its glyph clusters */
@@ -738,20 +979,75 @@ function buildLine(
   shadows: Map<Glyph, Glyph[]>,
   spanCount: Map<MarkedContent, number>,
   prior: boolean,
+  typingOrder: (entries: Entry[]) => boolean,
 ): LineModel | null {
-  let units = withSpaces(visualUnits(segment, spanCount));
   const padding: Glyph[] = [];
+  const typed = typingOrder(segment.entries);
+  let units = typed ? typedUnits(segment) : visualUnits(segment, spanCount);
+  // a space printed on top of letters (the end of a paragraph in right to left documents) separates nothing
+  const inked = units.filter((u) => u.text.trim());
+  units = units.filter((u) => {
+    if (u.text.trim() || u.actual || !u.glyphs.length) return true;
+    const width = u.u1 - u.u0;
+    const buried = (o: Unit) =>
+      width < 0.1 ? u.u0 > o.u0 && u.u0 < o.u1 : Math.min(u.u1, o.u1) - Math.max(u.u0, o.u0) > 0.75 * width;
+    if (!inked.some(buried)) return true;
+    padding.push(...u.glyphs);
+    return false;
+  });
+  // in typing order words are separated by real spaces, and gaps inside a word are only placement
+  if (!typed) units = withSpaces(units);
   const blank = (u: Unit) => !u.text.trim() && !u.actual;
   while (units.length && blank(units[0]!)) padding.push(...units.shift()!.glyphs);
   while (units.length && blank(units[units.length - 1]!)) padding.push(...units.pop()!.glyphs);
   if (!units.length) return null;
 
-  if (units.some((u) => NEEDS_REORDER.test(u.text))) {
+  if (!typed && units.some((u) => NEEDS_REORDER.test(u.text))) {
     units = reorderIndic(units.map((u) => ({ text: u.text, actual: u.actual }))).map((g) =>
       g.members.length === 1 ? { ...units[g.members[0]!]!, text: g.text } : mergeUnits(g.members.map((i) => units[i]!), g.text),
     );
   }
   return assemble(page, units, padding, segment, ex, ey, angle, shadows, prior);
+}
+
+/**
+ * Units of a line whose content order is the typing order: shaped scripts are read in that order and
+ * cut into words (positions inside a word say nothing about its letters), everything else stays single.
+ */
+function typedUnits(segment: Segment): Unit[] {
+  const entries = segment.entries.slice().sort((a, b) => a.g.seq - b.g.seq);
+  // a replacement string (text this editor added) stands for all its glyphs; a "space" without any
+  // width is a piece of a split character, not a space
+  const said = new Set<MarkedContent>();
+  const texts = entries.map((e) => {
+    const mark = e.g.actual;
+    if (mark) {
+      if (said.has(mark)) return "";
+      said.add(mark);
+      return mark.actualText!.normalize("NFC");
+    }
+    return isBlank(e.g) ? (e.w < 0.05 * e.size ? "" : " ") : textOfGlyphs([e.g]);
+  });
+  const cuts = new Set<number>();
+  for (const word of new Intl.Segmenter(undefined, { granularity: "word" }).segment(texts.join(""))) cuts.add(word.index);
+  const groups: { entries: Entry[]; text: string }[] = [];
+  let at = 0;
+  entries.forEach((e, i) => {
+    const text = texts[i]!;
+    const last = groups[groups.length - 1];
+    const before = entries[i - 1];
+    const joins =
+      last &&
+      before &&
+      (!text ||
+        (!cuts.has(at) && SHAPED.test(text) && SHAPED.test(last.text) && Math.abs(e.u - (before.u + before.w)) < 1.8 * e.size));
+    if (joins) {
+      last.entries.push(e);
+      last.text += text;
+    } else groups.push({ entries: [e], text });
+    at += text.length;
+  });
+  return groups.map((g) => unitOf(g.entries, g.text, false));
 }
 
 /** order the clusters logically and describe the line they form */
@@ -865,7 +1161,16 @@ function assemble(
   else if (bad > 0 && (bad >= chars * 0.5 || (bad >= 3 && bad > chars * 0.2)))
     note = "The text encoding of this line is broken. Recognise the page (OCR) to edit it.";
   else if (invalid >= 2 && invalid * 8 > chars) note = "The letters of this line are mapped wrongly in the file. Recognise the page (OCR) to edit it.";
+  if (segment.long) note = "This line is too long to edit directly.";
   if (note) editable = false;
+
+  // CSS letter-spacing and the like move every glyph individually: new text must be spaced the same way
+  const tracking = trackingOf(visualFinal, ex, ey);
+  if (tracking) {
+    const spaced = (s: TextStyle): TextStyle => ({ ...s, letterSpacing: Math.round(((s.letterSpacing ?? 0) + tracking * s.size) * 100) / 100 });
+    dominant = spaced(dominant);
+    for (const span of spans) span.style = spaced(span.style);
+  }
 
   const line: TextLine = {
     id: "",
@@ -903,7 +1208,30 @@ function assemble(
     shadows: lineShadows,
     rules: [],
     block: { left: u0, right: u1 },
+    tracking,
+    tooLong: segment.long,
   };
+}
+
+/** the same extra distance between (nearly) all neighbouring glyphs of a line, in ems; 0 when there is none */
+function trackingOf(visual: Unit[], ex: Point, ey: Point): number {
+  const extra: number[] = [];
+  for (let i = 1; i < visual.length; i++) {
+    const a = visual[i - 1]!;
+    const b = visual[i]!;
+    if (a.glyphs.length !== 1 || b.glyphs.length !== 1 || !a.text.trim() || !b.text.trim()) continue;
+    if (isComplex(a.text) || isComplex(b.text)) continue;
+    const x = a.glyphs[0]!;
+    const y = b.glyphs[0]!;
+    if (x.show.font !== y.show.font || Math.abs(x.size - y.size) > 0.01 || x.show.font.vertical) continue;
+    extra.push((toFrame(y.origin, ex, ey)[0] - toFrame(x.origin, ex, ey)[0] - Math.abs(x.advance)) / (x.size || 1));
+  }
+  if (extra.length < 3) return 0;
+  const median = extra.slice().sort((a, b) => a - b)[extra.length >> 1]!;
+  // kerning and rounding stay well below this
+  if (Math.abs(median) < 0.022 || Math.abs(median) > 1.2) return 0;
+  const agreeing = extra.filter((e) => Math.abs(e - median) < 0.018).length;
+  return agreeing >= 0.7 * extra.length ? median : 0;
 }
 
 export function styleOf(g: Glyph): TextStyle {
@@ -985,7 +1313,7 @@ function detectAlignment(models: LineModel[], interp: Interpretation) {
   };
   for (let i = 0; i < sorted.length; i++) {
     const a = sorted[i]!;
-    for (let j = i + 1; j < sorted.length; j++) {
+    for (let j = i + 1; j < sorted.length && j - i < NEIGHBOURS; j++) {
       const b = sorted[j]!;
       const dv = b.baseline - a.baseline;
       if (dv > 2.4 * a.size) break;
@@ -1035,10 +1363,12 @@ function detectAlignment(models: LineModel[], interp: Interpretation) {
       let align: Align | null = null;
       if (list.length >= 3 && full >= 2 && full >= list.length - 2 && Math.abs(m.u0 - left) < tol(m) && Math.abs(m.u1 - right) < tol(m))
         align = "justify";
-      else if (l && l >= r) align = "left";
+      // right to left text lines up on the right; a single shared left edge is more likely chance
+      else if (m.rtl && r && r + 1 >= l) align = "right";
+      else if (l && l >= r && !(m.rtl && l < 2)) align = "left";
       else if (r) align = "right";
       else if (c) align = "center";
-      else if (l) align = "left";
+      else if (l && !(m.rtl && l < 2)) align = "left";
       // first line of an indented paragraph
       else if (list.length >= 3 && Math.abs(m.u1 - right) < tol(m) && full >= 1) align = "left";
       m.line.align = align ?? alone(m);
@@ -1051,7 +1381,7 @@ function detectAlignment(models: LineModel[], interp: Interpretation) {
     let r = 0;
     let l = 0;
     for (const step of [-1, 1])
-      for (let j = i + step; j >= 0 && j < sorted.length; j += step) {
+      for (let j = i + step; j >= 0 && j < sorted.length && Math.abs(j - i) < NEIGHBOURS; j += step) {
         const o = sorted[j]!;
         if (Math.abs(o.baseline - m.baseline) > 8 * m.size) break;
         if (Math.abs(o.line.angle - m.line.angle) > 0.02) continue;
@@ -1061,10 +1391,32 @@ function detectAlignment(models: LineModel[], interp: Interpretation) {
     if (r > l) m.line.align = "right";
   }
 
+  // two neighbouring long lines that end flush on both sides are justified, even when the paragraph
+  // detection lumped them together with the single lines around them
+  const long = (m: LineModel) => m.u1 - m.u0 > 16 * m.size && m.units.filter((u) => !u.text.trim()).length >= 3;
+  for (let i = 0; i < sorted.length; i++) {
+    const a = sorted[i]!;
+    if (!long(a)) continue;
+    for (let j = i + 1; j < sorted.length && j - i < NEIGHBOURS; j++) {
+      const b = sorted[j]!;
+      const dv = b.baseline - a.baseline;
+      if (dv > 2.4 * a.size) break;
+      const flush = Math.max(0.8, 0.08 * a.size);
+      if (dv < 0.7 * a.size || !similar(a, b) || !long(b) || Math.abs(a.u0 - b.u0) > flush || Math.abs(a.u1 - b.u1) > flush) continue;
+      a.line.align = b.line.align = "justify";
+      a.block = b.block = { left: Math.min(a.u0, b.u0), right: Math.max(a.u1, b.u1) };
+    }
+  }
+
   function alone(m: LineModel): Align {
     if (Math.abs(m.line.angle) < 0.01) {
       const centre = m.line.origin[0] + (m.u1 - m.u0) / 2;
       if (Math.abs(centre - (px0 + px1) / 2) < 2 && m.line.origin[0] - px0 > 0.12 * (px1 - px0)) return "center";
+      // a short line pushed against the margin where other lines end is right aligned
+      if (!m.rtl && m.u0 > px0 + 0.45 * (px1 - px0) && models.length < 2000) {
+        const level = models.filter((o) => o !== m && Math.abs(o.line.angle) < 0.01);
+        if (level.filter((o) => Math.abs(o.u1 - m.u1) < 0.8).length >= 2 && !level.some((o) => Math.abs(o.u0 - m.u0) < 1.5)) return "right";
+      }
     }
     return m.rtl ? "right" : "left";
   }

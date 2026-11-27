@@ -320,6 +320,23 @@ export class Rewriter {
     return out.join("\n");
   }
 
+  /**
+   * Close the text object of `show` around `middle`. Marked content opened inside it has to end inside it
+   * too, so those marks are closed before and opened again after (their replacement text is not repeated).
+   * `closed` is a span the caller has already ended.
+   */
+  private around(show: ShowOp, middle: string, closed?: MarkedContent): string {
+    const to = show.textObject!;
+    const open = show.marked.filter((m) => m !== closed && m.node === show.node && m.begin > to.bt);
+    const reopen = open.map((m) => {
+      const props = { ...m.props };
+      delete props.ActualText;
+      const tag = serialize({ type: "name", value: m.tag || "Span" });
+      return Object.keys(props).length ? `${tag} ${serialize({ type: "dict", value: props })} BDC` : `${tag} BMC`;
+    });
+    return [...open.map(() => "EMC"), "ET", middle, "BT", ...reopen].join("\n");
+  }
+
   private showReplacement(show: ShowOp, stripped: Set<MarkedContent>): string {
     const op = show.node.ops[show.opIndex]!;
     const out: string[] = [];
@@ -367,6 +384,9 @@ export class Rewriter {
     const queued = this.placements.get(show) ?? [];
     let changedMatrix = false;
     const isNew = (e: Placement | Insert) => "ops" in e || e.fresh;
+    // new content must not sit inside an ActualText span that survives: it would not be extracted
+    const span = show.marked.find((m) => m.actualText !== undefined);
+    const split = span && !stripped.has(span) && queued.some(isNew) ? span : undefined;
     const render = (list: (Placement | Insert)[], target: string[], inside = false) => {
       let batch: Placement[] = [];
       const flush = () => {
@@ -381,17 +401,15 @@ export class Rewriter {
         // the last item may follow the text object; earlier ones stay in reading order inside it
         if (!inside && i === list.length - 1) target.push(this.escape(show, entry.ops, () => (changedMatrix = true)));
         else {
-          target.push(this.inline(show, entry.ops));
+          target.push(this.inline(show, entry.ops, split));
           changedMatrix = true;
         }
       });
       flush();
     };
 
-    // new content must not sit inside an ActualText span that survives: it would not be extracted
-    const span = show.marked.find((m) => m.actualText !== undefined);
-    if (!span || stripped.has(span) || !queued.some(isNew)) render(queued, out);
-    else this.splitSpan(show, span, queued, out, render);
+    if (!split) render(queued, out);
+    else this.splitSpan(show, split, queued, out, render);
     if (changedMatrix) out.push(this.restoreMatrix(show));
     return out.join("\n");
   }
@@ -445,13 +463,13 @@ export class Rewriter {
   }
 
   /** self contained operators inside the text object, which is closed and reopened around them */
-  private inline(show: ShowOp, ops: string): string {
+  private inline(show: ShowOp, ops: string, closed?: MarkedContent): string {
     if (show.textObject && show.tr >= 4) {
       // text used as a clipping path: do not split the object that builds it
       this.insertBefore(show.node, show.textObject.bt, this.wrap(ops));
       return "";
     }
-    return show.textObject ? `ET\n${this.wrap(ops)}\nBT` : this.wrap(ops);
+    return show.textObject ? this.around(show, this.wrap(ops), closed) : this.wrap(ops);
   }
 
   /**
@@ -479,7 +497,7 @@ export class Rewriter {
     }
     if (!to) return wrapped;
     reopened();
-    return `ET\n${wrapped}\nBT`;
+    return this.around(show, wrapped);
   }
 
   private restoreMatrix(show: ShowOp): string {

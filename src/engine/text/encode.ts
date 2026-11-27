@@ -45,6 +45,7 @@ export class Encoder {
   private fontsOnPage: PdfFont[] = [];
   private kerning = new Map<string, number>();
   private inspections = new Map<PdfFont, Promise<FontInspection | null>>();
+  private tops = new Map<PdfFont, { char: string; top: number; bottom: number }[]>();
   private words: Map<string, Clone[]> | null = null;
   private aksharas: Map<string, Clone[]> | null = null;
 
@@ -151,6 +152,33 @@ export class Encoder {
     if (!probe || (text.trim() && !probe.ink)) return null;
     const mapped = this.addToUnicode(font, cid, text);
     return { code, actual: !mapped };
+  }
+
+  /** how the letters of a document font stand, so that a substitute can be fitted to them */
+  async heights(ref: Glyph): Promise<{ char: string; top: number; bottom: number }[]> {
+    const name = ref.show.font.name;
+    let list = this.tops.get(ref.show.font);
+    if (list) return list;
+    list = [];
+    const seen = new Set<string>();
+    const scripts = new Map<string, number>();
+    for (const g of this.analysis.interp?.glyphs ?? []) {
+      const font = g.show.font;
+      const char = g.unicode;
+      if (font.name !== name || g.invisible || g.actual || seen.has(char) || [...char].length !== 1 || !/\p{L}/u.test(char)) continue;
+      const script = scriptOf(char);
+      // a handful of letters per script settles the median
+      if ((scripts.get(script) ?? 0) >= 16) continue;
+      const info = await this.inspect(font);
+      const gid = info?.ink ? font.probe(g.code)?.gid : undefined;
+      const ink = gid ? info!.ink!(gid) : null;
+      if (!ink) continue;
+      seen.add(char);
+      scripts.set(script, (scripts.get(script) ?? 0) + 1);
+      list.push({ char, top: ink[0] / info!.unitsPerEm, bottom: ink[1] / info!.unitsPerEm });
+    }
+    this.tops.set(ref.show.font, list);
+    return list;
   }
 
   private inspect(font: PdfFont): Promise<FontInspection | null> {

@@ -167,6 +167,7 @@ async function editLine(s: Session, model: LineModel, edit: LineEdit): Promise<b
 
   /* ---------- 1. what stays, what is new ---------- */
   const kept = newFace ? new Map<number, { unit: Unit; length: number }>() : diffUnits(model.units, line.text, text);
+  await keepWordsInOneFace(s, model, kept, text, style, scale);
   const keptUnits = new Set([...kept.values()].map((k) => k.unit));
   const items: Item[] = [];
   let pending = "";
@@ -213,7 +214,9 @@ async function editLine(s: Session, model: LineModel, edit: LineEdit): Promise<b
     if (item.kind === "keep") item.width = (item.unit.u1 - item.unit.u0) * scale + spacing * item.unit.glyphs.length;
     else if (item.kind === "glyphs") item.width = item.piece.width;
     else if (item.kind === "draw") {
-      const { request, unit } = drawRequest(item.text, item.ref, style, scale, recolor);
+      const { request, unit } = drawRequest(item.text, item.ref, style, scale, recolor, model.tracking);
+      // a deliberate change of typeface keeps that face's own proportions
+      if (!newFace) request.reference = await s.encoder.heights(item.ref);
       const planned = await fonts.planText(s.ctx, request);
       item.width = planned.width * unit;
       if (model.stacked) item.width = item.ref.size * scale;
@@ -225,16 +228,26 @@ async function editLine(s: Session, model: LineModel, edit: LineEdit): Promise<b
   const sequence = visualOrder(model, items, text).map((i) => items[i]!);
   let cursor = model.u0;
   let previous: Item | null = null;
+  // letter spacing of a tracked line; new items already carry it in their width
+  const tracked = model.tracking * line.style.size * scale;
   for (const item of sequence) {
     // neighbours that were neighbours before keep their kerning
-    const gap =
-      previous?.kind === "keep" && item.kind === "keep" && item.unit.vis === previous.unit.vis + 1
-        ? (item.unit.u0 - previous.unit.u1) * scale
-        : 0;
+    let gap = 0;
+    if (previous?.kind === "keep") {
+      if (item.kind === "keep" && item.unit.vis === previous.unit.vis + 1) gap = (item.unit.u0 - previous.unit.u1) * scale;
+      else if (item.kind !== "space") {
+        gap = tracked;
+        // extra room the producer left behind a space (wide word spacing) stays, whatever follows now
+        const next = model.visual[previous.unit.vis + 1];
+        if (!previous.unit.text.trim() && next) gap = Math.max(gap, (next.u0 - previous.unit.u1) * scale);
+      }
+    }
     item.u = cursor + gap;
     cursor = item.u + item.width;
     previous = item;
   }
+  // there is no letter spacing after the last letter
+  if (previous && previous.kind !== "keep" && previous.kind !== "space") previous.width -= tracked;
   const extent = () => [sequence[0]!.u, Math.max(...sequence.map((i) => i.u + i.width))] as const;
   let [start, end] = extent();
   const origWidth = model.u1 - model.u0;
@@ -323,6 +336,8 @@ async function editLine(s: Session, model: LineModel, edit: LineEdit): Promise<b
     } else if (item.kind === "glyphs") {
       const actual = item.piece.needsActualText ? { text: item.piece.text } : undefined;
       for (const layer of [...shadowsOf(item.ref), item.ref]) {
+        // a copy painted from another font cannot take these codes
+        if (layer.show.font !== item.ref.show.font) continue;
         const dx = layer.origin[0] - item.ref.origin[0];
         const dy = layer.origin[1] - item.ref.origin[1];
         for (const g of item.piece.glyphs) {
@@ -345,10 +360,13 @@ async function editLine(s: Session, model: LineModel, edit: LineEdit): Promise<b
         const dx = layer.origin[0] - item.ref.origin[0];
         const dy = layer.origin[1] - item.ref.origin[1];
         const p = toPage(item.u + (model.stacked ?? 0) * scale, lineV(item.v));
-        const matrix = drawMatrix(s, item.ref, [p[0] + dx, p[1] + dy]);
+        // the text goes into the layer's own graphics state, so its matrix has to be relative to that
+        const matrix = drawMatrix(s, layer, [p[0] + dx, p[1] + dy]);
         if (model.stacked) for (let k = 0; k < 4; k++) matrix[k]! *= squeeze;
         const written = await fonts.writeText(s.ctx, {
           ...base,
+          // copies underneath keep their own paint (shadow colour, outline)
+          ...(layer === item.ref ? {} : { colorOps: "", renderMode: layer.show.tr === 7 ? 0 : layer.show.tr % 4 }),
           horizontalScale: (base.horizontalScale ?? 100) * narrow,
           matrix,
           resources: rewriter.resourcesFor(layer.show.node),
@@ -416,6 +434,48 @@ async function editLine(s: Session, model: LineModel, edit: LineEdit): Promise<b
   return true;
 }
 
+/**
+ * A word that needs letters the document font cannot supply, and whose substitute looks different, is
+ * redrawn as a whole: one odd looking word reads better than odd looking letters inside a word.
+ */
+async function keepWordsInOneFace(
+  s: Session,
+  model: LineModel,
+  kept: Map<number, { unit: Unit; length: number }>,
+  text: string,
+  change: Partial<TextStyle>,
+  scale: number,
+): Promise<void> {
+  if (model.stacked) return;
+  for (const match of text.matchAll(/\S+/g)) {
+    const word = match[0];
+    // joined and unspaced scripts are handled elsewhere
+    if (isComplex(word) || CJK.test(word) || hasRtl(word)) continue;
+    const from = match.index;
+    const inside = [...kept].filter(([at]) => at >= from && at < from + word.length);
+    if (!inside.length) continue;
+    const covered = new Set(inside.flatMap(([at, k]) => Array.from({ length: k.length }, (_, i) => at + i)));
+    const ref = inside[0]![1].unit.glyphs[0];
+    if (!ref) continue;
+    let missing = "";
+    for (const part of new Intl.Segmenter().segment(word)) {
+      if (covered.has(from + part.index)) continue;
+      let found = false;
+      for (const font of s.encoder.candidates(part.segment, ref, model))
+        if (await s.encoder.encode(part.segment, font)) {
+          found = true;
+          break;
+        }
+      if (!found) missing += part.segment;
+    }
+    if (!missing) continue;
+    const { request } = drawRequest(missing, ref, change, scale, undefined, model.tracking);
+    const plan = await fonts.planText(s.ctx, request);
+    if (!plan.substituted || plan.fontsUsed.every((f) => fonts.LOOKALIKE[f]?.test(ref.show.font.name))) continue;
+    for (const [at] of inside) kept.delete(at);
+  }
+}
+
 /** spread `extra` over the word gaps; returns the squeeze needed when that is not possible */
 function justify(sequence: Item[], extra: number): number {
   const isGap = (i: Item) => (i.kind === "keep" ? !i.unit.text.trim() : i.kind === "space");
@@ -424,7 +484,9 @@ function justify(sequence: Item[], extra: number): number {
   const each = gaps.length ? extra / gaps.length : 0;
   const head = sequence[0]!;
   const size = head.kind === "keep" ? head.unit.size : head.ref.size;
-  if (gaps.length && gaps.every((g) => g.width + each > 0.12 * size) && each < 2.5 * size) {
+  // a line that became much shorter reads as the last line of its paragraph: it is not blown up
+  if (extra > 0.25 * (width + extra)) return 1;
+  if (gaps.length && gaps.every((g) => g.width + each > 0.12 * size) && each < 1.2 * size) {
     let added = 0;
     for (const item of sequence) {
       item.u += added;
@@ -468,7 +530,16 @@ function referenceGlyph(model: LineModel, token: string, replaced: Unit[], befor
   const kind = (s: string) => (/\p{Nd}/u.test(s) ? "n" : /\p{L}/u.test(s) ? "l" : "o");
   const usable = (u: Unit | null | undefined): u is Unit => !!u && u.glyphs.length > 0 && !!u.text.trim();
   const own = replaced.filter(usable);
-  const match = own.find((u) => kind(u.text) === kind(token)) ?? own[0];
+  // where the replaced text mixes styles, the one most of it is written in wins
+  const key = (u: Unit) => {
+    const s = styleOf(u.glyphs[0]!);
+    return `${s.family}|${s.size.toFixed(0)}|${s.color.map((c) => c.toFixed(1))}`;
+  };
+  const weight = new Map<string, number>();
+  for (const u of own) weight.set(key(u), (weight.get(key(u)) ?? 0) + u.text.length);
+  const heaviest = [...weight].sort((a, b) => b[1] - a[1])[0]?.[0];
+  const main = own.filter((u) => key(u) === heaviest);
+  const match = main.find((u) => kind(u.text) === kind(token)) ?? main[0];
   if (match) return match.glyphs[0]!;
   // continue the style of the text before the insertion, or of what follows when a space sits in between
   const index = before ? model.units.indexOf(before) : -1;
@@ -510,7 +581,7 @@ async function newItems(s: Session, model: LineModel, c: Chunk): Promise<Item[]>
     const w = font.vertical ? Math.abs(font.verticalAdvance(code)) : font.width(code);
     const size = Math.abs(show.size) * encoder.scaleFor(font, ref);
     const tx = (w * size + show.tc + (space ? show.tw : 0)) * (font.vertical ? 1 : Math.abs(show.th));
-    return tx * ref.unit * c.scale + c.spacing;
+    return (tx * ref.unit + model.tracking * ref.size) * c.scale + c.spacing;
   };
 
   const levels = model.rtl || hasRtl(c.full) ? bidi().getEmbeddingLevels(c.full, model.rtl ? "rtl" : "ltr").levels : null;
@@ -521,7 +592,7 @@ async function newItems(s: Session, model: LineModel, c: Chunk): Promise<Item[]>
     const ref = referenceGlyph(model, token, c.replaced, c.before, c.after);
     // text sits on the line's baseline unless the text it continues is raised or lowered
     const own = toFrame(ref.origin, model.ex, model.ey)[1];
-    const v = Math.abs(own - model.baseline) > 0.18 * ref.size ? own : model.baseline;
+    const v = !model.cascade && Math.abs(own - model.baseline) > 0.18 * ref.size ? own : model.baseline;
     const base = { at, u: 0, replaces: c.replaced };
     const font = c.variant ?? ref.show.font;
 
@@ -680,7 +751,7 @@ function drawMatrix(s: Session, ref: Glyph, origin: Point): Matrix {
   return [m[0] * factor, m[1] * factor, m[2] * factor, m[3] * factor, user[0], user[1]];
 }
 
-function drawRequest(text: string, ref: Glyph, change: Partial<TextStyle>, scale: number, color: RGB | undefined) {
+function drawRequest(text: string, ref: Glyph, change: Partial<TextStyle>, scale: number, color: RGB | undefined, tracking: number) {
   const own = styleOf(ref);
   const show = ref.show;
   const font = show.font;
@@ -688,7 +759,7 @@ function drawRequest(text: string, ref: Glyph, change: Partial<TextStyle>, scale
   // page units per writeText unit along the baseline
   const unit = ref.unit * Math.abs(textFactor(ref));
   const th = Math.abs(show.th) || 1;
-  const spacingPage = change.letterSpacing !== undefined ? change.letterSpacing : show.tc * th * ref.unit * scale;
+  const spacingPage = change.letterSpacing !== undefined ? change.letterSpacing : (show.tc * th * ref.unit + tracking * ref.size) * scale;
   const request: Omit<WriteTextRequest, "resources" | "matrix"> = {
     text,
     style,

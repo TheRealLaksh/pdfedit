@@ -1,6 +1,6 @@
 /** Which glyph clusters of a line survive an edit unchanged. */
-import type { Unit } from "./layout";
-import { hasRtl, isComplex } from "./unicode";
+import { styleOf, type Unit } from "./layout";
+import { hasRtl, isComplex, NOSPACE_SCRIPT } from "./unicode";
 
 interface Char {
   c: number;
@@ -77,7 +77,7 @@ const WORD = /[\p{L}\p{M}\p{N}\u200C\u200D]/u;
 
 /** single letters that happen to match somewhere else in a rewritten word are not worth keeping */
 function dropStrays(map: Int32Array, before: string, after: string): void {
-  const edge = (s: string, at: number) => at <= 0 || at >= s.length || /s/.test(s[at - 1]!) || /s/.test(s[at]!);
+  const edge = (s: string, at: number) => at <= 0 || at >= s.length || /\s/.test(s[at - 1]!) || /\s/.test(s[at]!);
   for (let i = 0; i < before.length; ) {
     if (map[i]! < 0) {
       i++;
@@ -88,9 +88,33 @@ function dropStrays(map: Int32Array, before: string, after: string): void {
     const from = map[i]!;
     const to = from + (end - i);
     const solid =
-      end - i >= 3 || /s/.test(before.slice(i, end)) || (edge(before, i) && edge(after, from)) || (edge(before, end) && edge(after, to));
+      end - i >= 3 || /\s/.test(before.slice(i, end)) || (edge(before, i) && edge(after, from)) || (edge(before, end) && edge(after, to));
     if (!solid) map.fill(-1, i, end);
     i = end;
+  }
+}
+
+const styleKey = (u: Unit) => {
+  const s = styleOf(u.glyphs[0]!);
+  return `${s.bold}|${s.italic}|${s.size.toFixed(0)}|${s.color.map((c) => c.toFixed(1))}`;
+};
+
+/**
+ * On a line with several styles, letters that happen to survive inside a new word would give it a
+ * patchwork look: such a word keeps old glyphs only if they are most of it and all in one style.
+ */
+function dropMixed(keep: Set<Unit>, map: Int32Array, units: Unit[], after: string): void {
+  const drawn = units.filter((u) => u.glyphs.length && u.text.trim());
+  if (new Set(drawn.map(styleKey)).size < 2) return;
+  for (const part of new Intl.Segmenter(undefined, { granularity: "word" }).segment(after)) {
+    if (!part.isWordLike) continue;
+    const from = part.index;
+    const to = from + part.segment.length;
+    const inside = drawn.filter((u) => keep.has(u) && map[u.start]! >= from && map[u.start]! < to);
+    const covered = inside.reduce((n, u) => n + u.end - u.start, 0);
+    // untouched words keep all their styles
+    if (!inside.length || covered >= part.segment.length) continue;
+    if (covered * 2 < part.segment.length || new Set(inside.map(styleKey)).size > 1) for (const u of inside) keep.delete(u);
   }
 }
 
@@ -104,6 +128,11 @@ export function diffUnits(units: Unit[], before: string, after: string): Map<num
     return true;
   };
   const keep = new Set(units.filter((u) => intact(u.start, u.end)));
+  // Thai, Khmer and the like write words without spaces between them: a dictionary finds the words
+  const unspaced = NOSPACE_SCRIPT.test(before) || NOSPACE_SCRIPT.test(after);
+  const boundaries = (s: string) => new Set([...new Intl.Segmenter(undefined, { granularity: "word" }).segment(s)].map((w) => w.index).concat(s.length));
+  const oldWords = unspaced ? boundaries(before) : null;
+  const newWords = unspaced ? boundaries(after) : null;
   // scripts whose letters join or reorder are kept or replaced one whole word at a time
   let word: Unit[] = [];
   const settle = () => {
@@ -119,17 +148,23 @@ export function diffUnits(units: Unit[], before: string, after: string): Map<num
         const to = from + (end - start);
         const prev = [...after.slice(Math.max(0, from - 2), from)].pop() ?? "";
         const next = after.slice(to, to + 2);
-        same = !WORD.test(prev) && !(next && WORD.test(String.fromCodePoint(next.codePointAt(0)!)));
+        const startsWord = !WORD.test(prev) || (NOSPACE_SCRIPT.test(text) && !!newWords?.has(from) && !/^\p{M}/u.test(after.slice(from)));
+        const endsWord =
+          !(next && WORD.test(String.fromCodePoint(next.codePointAt(0)!))) || (NOSPACE_SCRIPT.test(text) && !!newWords?.has(to));
+        same = startsWord && endsWord;
       }
       if (!same) for (const u of word) keep.delete(u);
     }
     word = [];
   };
   for (const u of units) {
-    if ([...u.text].every((c) => WORD.test(c)) && u.text) word.push(u);
-    else settle();
+    if ([...u.text].every((c) => WORD.test(c)) && u.text) {
+      if (oldWords?.has(u.start) && NOSPACE_SCRIPT.test(u.text)) settle();
+      word.push(u);
+    } else settle();
   }
   settle();
+  dropMixed(keep, map, units, after);
   const out = new Map<number, { unit: Unit; length: number }>();
   for (const u of units) if (keep.has(u)) out.set(map[u.start]!, { unit: u, length: u.end - u.start });
   return out;

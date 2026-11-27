@@ -38,10 +38,14 @@ function build(ctx: EngineContext, pageIndex: number): Analysis {
     const cover = interp ? coverage(interp.images, pageRect) : 0;
     if (interp) {
       // a line running off the page keeps its hidden end; lines wholly outside are left alone
+      // Microsoft Word labels the glyphs of a shaped cluster with its characters in typing order,
+      // whatever order they are painted in
+      const maker = `${ctx.doc.getMetaData("info:Producer") ?? ""} ${ctx.doc.getMetaData("info:Creator") ?? ""}`;
       models = buildLines(
         pageIndex,
         interp,
         interp.glyphs.filter((g) => !g.invisible),
+        /Microsoft.{0,4}Word/i.test(maker),
       ).filter((m) => intersects(m.line.rect, pageRect));
       if (cover > 0.3) {
         const hidden = interp.glyphs.filter((g) => g.invisible && g.show.tr % 4 === 3);
@@ -59,7 +63,7 @@ function build(ctx: EngineContext, pageIndex: number): Analysis {
     if (!interp || (!interp.glyphs.length && interp.errors.length)) models = fallbackLines(pageIndex, page);
 
     const visibleChars = models.reduce((n, m) => n + m.line.text.trim().length, 0);
-    const garbled = models.reduce((n, m) => n + (m.line.editable ? 0 : m.line.text.trim().length), 0);
+    const garbled = models.reduce((n, m) => n + (m.line.editable || m.tooLong ? 0 : m.line.text.trim().length), 0);
     let kind: PageKind;
     if (!visibleChars) {
       // a scan with a hidden text layer has both; one without is purely a picture
@@ -195,6 +199,7 @@ export function fallbackLines(pageIndex: number, page: MuPDF.PDFPage): LineModel
         shadows: new Map(),
         rules: [],
         block: { left: u0, right: u1 },
+        tracking: 0,
       });
     },
   });

@@ -409,11 +409,14 @@ export class PdfFont {
 
 /**
  * Chromium draws a synthetic bold into Type3 outlines by widening them with a stroke of 1/32 em, which
- * leaves steps of exactly half that width (15.625 units of 1000) in the paths.
+ * leaves steps of exactly half that width (1/64 em, in whatever units the font matrix uses) in the paths.
  */
 function emboldened(dict: MuPDF.PDFObject): boolean {
   const procs = dict.get("CharProcs");
   if (!procs.isDictionary()) return false;
+  const matrix = dict.get("FontMatrix");
+  const scale = matrix.isArray() ? Math.abs(matrix.get(0).asNumber()) : 0.001;
+  const step = 1 / 64 / (scale || 0.001);
   let seen = 0;
   let steps = 0;
   procs.forEach((stream) => {
@@ -429,7 +432,7 @@ function emboldened(dict: MuPDF.PDFObject): boolean {
       const ny = Number(m[2]);
       const dx = Math.abs(nx - x);
       const dy = Math.abs(ny - y);
-      if ((Math.abs(dx - 15.625) < 0.02 && dy < 0.02) || (Math.abs(dy - 15.625) < 0.02 && dx < 0.02)) steps++;
+      if ((Math.abs(dx - step) < 0.02 && dy < 0.02) || (Math.abs(dy - step) < 0.02 && dx < 0.02)) steps++;
       x = nx;
       y = ny;
     }

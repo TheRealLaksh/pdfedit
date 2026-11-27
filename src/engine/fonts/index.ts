@@ -11,6 +11,7 @@ import { listUserFonts, registerUserFont } from "./user";
 
 export * from "./types";
 export { inspectFont } from "./inspect";
+export { LOOKALIKE } from "./layout";
 
 export function listFonts(ctx: EngineContext): FontChoice[] {
   return [...listUserFonts(ctx), ...catalogChoices()];

@@ -14,6 +14,8 @@ export interface PlacedGlyph {
   source: Source;
   face: Face;
   gid: number;
+  /** font size this glyph is drawn at (substitutes are sized to match the original) */
+  size: number;
   /** glyph origin relative to the line's left baseline point, points, y up (before horizontal scale) */
   x: number;
   y: number;
@@ -139,6 +141,29 @@ function bidiLevels(text: string): { levels: Uint8Array; base: number } {
   return { levels, base };
 }
 
+/** substitutes drawn so much like the original that single letters of theirs do not show inside a word */
+export const LOOKALIKE: Record<string, RegExp> = { Arimo: /arial|helvetica/i, Tinos: /times/i };
+
+/**
+ * Ranges of words the document's own subset can only draw in part. When the substitute looks different,
+ * such a word is drawn in the substitute as a whole: odd letters inside a word stand out far more.
+ */
+async function patchworkRanges(resolver: Resolver, text: string): Promise<{ start: number; end: number; key: string }[]> {
+  const out: { start: number; end: number; key: string }[] = [];
+  const [own, next] = resolver.base;
+  if (!own?.key.startsWith("doc:")) return out;
+  if (next && (!next.substituted || LOOKALIKE[next.family]?.test(own.family))) return out;
+  const face = await own.load();
+  if (!face) return out;
+  for (const word of text.matchAll(/[^ ]+/g)) {
+    // only alphabets: each syllable or ideograph of other scripts stands on its own
+    if (!/^[\p{Script=Latin}\p{Script=Greek}\p{Script=Cyrillic}\p{Script=Common}\p{M}]+$/u.test(word[0])) continue;
+    const parts = [...segmenter.segment(word[0])].map((s) => covers(face, own, s.segment));
+    if (parts.includes(true) && parts.includes(false)) out.push({ start: word.index, end: word.index + word[0].length, key: own.key });
+  }
+  return out;
+}
+
 async function chooseFonts(resolver: Resolver, text: string, levels: Uint8Array, missing: Set<string>): Promise<Cluster[]> {
   const raw = [...segmenter.segment(text)].map((s) => ({ start: s.index, text: s.segment, own: clusterScript(s.segment) }));
   // characters without a script of their own join the one before them (or after, at the start)
@@ -150,6 +175,7 @@ async function chooseFonts(resolver: Resolver, text: string, levels: Uint8Array,
     const face = await source.load();
     return face ? { source, face } : null;
   };
+  const skipped = await patchworkRanges(resolver, text);
 
   for (const c of raw) {
     const script = c.own === "Common" ? previous : c.own;
@@ -167,7 +193,8 @@ async function chooseFonts(resolver: Resolver, text: string, levels: Uint8Array,
     let picked: { source: Source; face: Face } | null = null;
     if (!visible.length && last) picked = last;
     // joiners and marks typed on their own stay with the font before them
-    picked ??= await usable(resolver.base, c.text);
+    const skip = skipped.find((r) => c.start >= r.start && c.start < r.end)?.key;
+    picked ??= await usable(skip ? resolver.base.filter((s) => s.key !== skip) : resolver.base, c.text);
     if (!picked && c.own === "Common" && last) picked = await usable([last.source], c.text);
     picked ??= await usable(resolver.forScript(script), c.text);
     picked ??= await usable(resolver.fallbacks(visible[0]?.codePointAt(0) ?? 32), c.text);
@@ -225,6 +252,33 @@ function visualOrder<T extends { level: number }>(runs: T[]): T[] {
   return out;
 }
 
+/**
+ * Fonts of the same nominal size differ in how large their letters look and where they stand. A
+ * substitute next to the original is fitted to the letters both can draw (medians of their heights and
+ * of the offset of their lower edges).
+ */
+function fit(request: MeasureTextRequest, run: Run): { scale: number; rise: number } {
+  const none = { scale: 1, rise: 0 };
+  if (!request.reference || !run.source.substituted || request.style.fontChoice) return none;
+  const pairs: { height: number; bottom: number; own: number; ownBottom: number }[] = [];
+  const upem = run.face.info.unitsPerEm;
+  for (const { char, top, bottom } of request.reference) {
+    if (clusterScript(char) !== run.script) continue;
+    const gid = run.face.glyph(char.codePointAt(0)!);
+    const e = gid ? run.face.hbFont.glyphExtents(gid) : undefined;
+    const own = e ? -e.height / upem : 0;
+    if (own > 0.15 && top - bottom > 0.15) pairs.push({ height: top - bottom, bottom, own, ownBottom: (e!.yBearing + e!.height) / upem });
+  }
+  if (pairs.length < 3) return none;
+  const median = (list: number[]) => list.sort((a, b) => a - b)[list.length >> 1]!;
+  let scale = median(pairs.map((p) => p.height / p.own));
+  scale = Math.abs(scale - 1) < 0.035 ? 1 : Math.min(1.35, Math.max(0.62, scale));
+  const rise = median(pairs.map((p) => p.bottom - p.ownBottom * scale));
+  // a larger shift would make readers take the substitute for another line
+  const limit = 0.12 * Math.min(1, scale);
+  return { scale, rise: Math.abs(rise) < 0.045 || Math.abs(rise) > 0.25 ? 0 : Math.max(-limit, Math.min(limit, rise)) };
+}
+
 interface ShapedGroup {
   start: number;
   end: number;
@@ -256,8 +310,14 @@ export async function layoutText(ctx: EngineContext, request: MeasureTextRequest
   const groups: ShapedGroup[] = [];
   let pen = 0;
 
+  const sizes = new Map<Run, number>();
+  const rises = new Map<Run, number>();
   for (const run of visualOrder(runs)) {
-    const scale = size / run.face.info.unitsPerEm;
+    const adapt = fit(request, run);
+    const runSize = size * adapt.scale;
+    rises.set(run, size * adapt.rise);
+    sizes.set(run, runSize);
+    const scale = runSize / run.face.info.unitsPerEm;
     const cursive = !!scriptInfo(run.script)?.cursive;
     const buffer = new hb.Buffer();
     // the whole line is given as context so joining works across run boundaries
@@ -300,8 +360,10 @@ export async function layoutText(ctx: EngineContext, request: MeasureTextRequest
   for (const g of mergeOverlapping(groups, size)) {
     const part = text.slice(g.start, g.end);
     const { face, source } = g.run;
+    const own = sizes.get(g.run)!;
     const place = (glyph: ShapedGroup["glyphs"][number], t: string, declared?: number) =>
-      glyphs.push({ source, face, ...glyph, text: t, declared });
+      // the baseline offset is added last: choosing the main glyph below works on the font's own baseline
+      glyphs.push({ source, face, size: own, ...glyph, y: glyph.y + rises.get(g.run)!, text: t, declared });
     if (g.glyphs.length === 1) {
       place(g.glyphs[0]!, part);
       continue;
@@ -312,10 +374,10 @@ export async function layoutText(ctx: EngineContext, request: MeasureTextRequest
       Math.abs(gl.y) < Math.abs(best.y) || (Math.abs(gl.y) === Math.abs(best.y) && gl.x < best.x) ? gl : best,
     );
     const first = glyphs.length;
-    place(main, part, (g.width * 1000) / size);
+    place(main, part, (g.width * 1000) / own);
     // rightmost last, reaching the cluster's edge: some extractors end a marked span at its last glyph
     const rest = g.glyphs.filter((gl) => gl !== main).sort((x, y) => x.x - y.x);
-    rest.forEach((gl, k) => place(gl, FILLER, k === rest.length - 1 ? (Math.max(0, g.x + g.width - gl.x) * 1000) / size : 0));
+    rest.forEach((gl, k) => place(gl, FILLER, k === rest.length - 1 ? (Math.max(0, g.x + g.width - gl.x) * 1000) / own : 0));
     glyphs[first]!.actual = { text: part, glyphs: g.glyphs.length };
   }
 

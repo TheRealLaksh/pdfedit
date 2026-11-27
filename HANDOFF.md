@@ -65,12 +65,13 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 <!-- handoff:auto:start -->
 ## Auto: repo state
 
-_Refreshed 27 Nov 2026, 11:33 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
+_Refreshed 27 Nov 2026, 11:41 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
 
 Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `74f6157` 2026-11-27 23:33 docs: describe features and limits
 - `a4598bd` 2026-11-27 23:33 fix(viewer): keep a tap made while a change is saving
 - `4dd84e0` 2026-11-27 23:28 test: desktop and back-navigation browser tests
 - `41fa302` 2026-11-27 23:28 fix(shell): desktop and back-navigation fixes, restriction and XFA notices
@@ -85,25 +86,24 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `8982559` 2026-11-27 22:30 docs: handoff status for text and tests
 - `46f08ff` 2026-11-27 22:30 feat(text): edit existing text in place, keeping the document's fonts, colours and positions
 - `5ce54d9` 2026-11-27 22:24 fix(viewer): safe document close, 44px size buttons and undo while typing
-- `126fec4` 2026-11-27 22:22 fix(ops): keep stroke state on redaction, order rotated text, quiet export after undo
 
 ### Uncommitted changes at refresh time
 
 ```
-M  README.md
- M src/engine/fonts/draw.ts
- M src/engine/fonts/index.ts
- M src/engine/fonts/inspect.ts
- M src/engine/fonts/layout.ts
- M src/engine/fonts/types.ts
- M src/engine/text/analyze.ts
- M src/engine/text/diff.ts
- M src/engine/text/edit.ts
- M src/engine/text/encode.ts
- M src/engine/text/layout.ts
- M src/engine/text/pdffont.ts
- M src/engine/text/rewrite.ts
- M tests/text/mockFonts.ts
-?? tests/text/fidelity.test.ts
+M  src/engine/fonts/draw.ts
+M  src/engine/fonts/index.ts
+M  src/engine/fonts/inspect.ts
+M  src/engine/fonts/layout.ts
+M  src/engine/fonts/types.ts
+M  src/engine/text/analyze.ts
+M  src/engine/text/diff.ts
+M  src/engine/text/edit.ts
+M  src/engine/text/encode.ts
+M  src/engine/text/layout.ts
+M  src/engine/text/pdffont.ts
+M  src/engine/text/rewrite.ts
+A  tests/text/fidelity.test.ts
+A  tests/text/longline.test.ts
+M  tests/text/mockFonts.ts
 ```
 <!-- handoff:auto:end -->

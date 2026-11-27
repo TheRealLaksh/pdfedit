@@ -61,3 +61,5 @@ export function listFonts() {
 export function addUserFont() {
   throw new Error("not available in the mock");
 }
+
+export const LOOKALIKE: Record<string, RegExp> = {};

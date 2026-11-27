@@ -28,6 +28,11 @@ export interface WriteTextRequest {
    * is current. Undefined = set DeviceRGB from style.color.
    */
   colorOps?: string;
+  /**
+   * Where the ink of characters the original font draws begins and ends above the baseline, in ems. A
+   * substitute font is sized and placed so that its letters stand like these.
+   */
+  reference?: { char: string; top: number; bottom: number }[];
 }
 
 export type MeasureTextRequest = Omit<WriteTextRequest, "resources" | "matrix">;
@@ -59,4 +64,6 @@ export interface FontInspection {
   glyphForUnicode(codePoint: number): number;
   unitsPerEm: number;
   advance(glyphId: number): number;
+  /** upper and lower edge of the ink relative to the baseline, font units (sfnt programs only) */
+  ink?(glyphId: number): [top: number, bottom: number] | null;
 }
