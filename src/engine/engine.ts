@@ -146,6 +146,7 @@ export class Engine implements EngineAPI {
     const ctx = this.context;
     const before = structuredClone(ctx.state);
     ctx.cache.clear();
+    const position = ctx.doc.getJournal().position;
     ctx.doc.beginOperation(name);
     let change: ModuleChange;
     try {
@@ -158,8 +159,11 @@ export class Engine implements EngineAPI {
     }
     ctx.doc.endOperation();
     this.invalidate(ctx);
-    this.past.push(before);
-    this.future = [];
+    // MuPDF drops operations that changed nothing: only record a step it can actually undo
+    if (ctx.doc.getJournal().position > position) {
+      this.past.push(before);
+      this.future = [];
+    }
     return this.result(change);
   }
 
