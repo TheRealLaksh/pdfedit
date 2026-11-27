@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.tmp/
+coverage/
+test-results/
+playwright-report/
+.wrangler/
+.env*
+*.log
+.claude/settings.local.json
+tests/fixtures/out/
+tests/**/output/

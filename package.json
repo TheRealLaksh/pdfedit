@@ -1,0 +1,46 @@
+{
+  "name": "pdfedit",
+  "version": "1.0.0",
+  "description": "Edit the existing text of any PDF, in any language, entirely in the browser.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint src tests",
+    "test": "vitest run",
+    "e2e": "playwright test",
+    "deploy": "npm run build && wrangler pages deploy dist --project-name=pdfedit --branch=main",
+    "handoff": "node scripts/handoff.mjs auto"
+  },
+  "type": "module",
+  "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
+    "bidi-js": "^1.1.0",
+    "harfbuzzjs": "^1.6.4",
+    "mupdf": "^1.28.6",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "tesseract.js": "^7.0.0",
+    "zustand": "^5.1.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.1",
+    "@types/node": "^26.6.11",
+    "@types/react": "^19.3.3",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "oxlint": "^1.95.0",
+    "playwright": "^1.65.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.4.0",
+    "vitest": "^5.1.2"
+  },
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "homepage": "https://pdfedit.lakshpradhwani.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TheRealLaksh/pdfedit.git"
+  }
+}
