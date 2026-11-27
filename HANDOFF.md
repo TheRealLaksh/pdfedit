@@ -54,6 +54,7 @@ Branch: `main` · remote: none
 
 ### Last 15 commits
 
+- `34797a1` 2026-11-27 21:14 feat(engine): engine router, journal undo and worker bridge
 - `0b80a57` 2026-11-27 21:14 feat(engine): content stream tokenizer and page helpers
 - `dacf1be` 2026-11-27 21:14 feat(engine): contract, context and geometry helpers
 - `a7cf22a` 2026-11-27 21:13 docs: readme, module brief and handoff automation
@@ -62,18 +63,11 @@ Branch: `main` · remote: none
 ### Uncommitted changes at refresh time
 
 ```
-A  src/engine/client.ts
-A  src/engine/engine.ts
-A  src/engine/fonts/index.ts
-A  src/engine/fonts/types.ts
-A  src/engine/ocr/index.ts
-A  src/engine/ops/index.ts
-A  src/engine/text/index.ts
-A  src/engine/worker.ts
-?? src/App.tsx
-?? src/main.tsx
-?? src/ocr/
-?? src/store/
-?? src/ui/
+A  src/App.tsx
+A  src/main.tsx
+A  src/ocr/index.ts
+A  src/store/index.ts
+A  src/ui/tokens.css
+A  src/ui/viewer/Viewer.tsx
 ```
 <!-- handoff:auto:end -->

@@ -1,0 +1,57 @@
+/* Design tokens shared by viewer and shell. SHELL module may add tokens; never rename these. */
+:root {
+  --bg: #f4f4f2;
+  --surface: #ffffff;
+  --surface-2: #f0f0ee;
+  --text: #17171a;
+  --muted: #63636b;
+  --border: #e2e2de;
+  --accent: #2f5bea;
+  --accent-text: #ffffff;
+  --accent-soft: #e8edfd;
+  --danger: #c0352b;
+  --warning: #9a6200;
+  --success: #1d7a4a;
+  --radius: 10px;
+  --radius-sm: 7px;
+  --shadow: 0 6px 24px rgb(0 0 0 / 0.1);
+  --toolbar-h: 52px;
+  --bottombar-h: 64px;
+  --tap: 44px;
+  --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #131315;
+    --surface: #1c1c1f;
+    --surface-2: #26262a;
+    --text: #ececef;
+    --muted: #9c9ca6;
+    --border: #303036;
+    --accent: #7c9bff;
+    --accent-text: #0d1330;
+    --accent-soft: #23294a;
+    --danger: #ff8077;
+    --warning: #e8b35a;
+    --success: #62cf97;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #131315;
+  --surface: #1c1c1f;
+  --surface-2: #26262a;
+  --text: #ececef;
+  --muted: #9c9ca6;
+  --border: #303036;
+  --accent: #7c9bff;
+  --accent-text: #0d1330;
+  --accent-soft: #23294a;
+  --danger: #ff8077;
+  --warning: #e8b35a;
+  --success: #62cf97;
+  color-scheme: dark;
+}
