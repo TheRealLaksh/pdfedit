@@ -64,18 +64,21 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 - Small commits, pushed after each (Laksh, 27 Nov session only; ask again next session).
 
 ## Session log
+- 2026-11-28: summary emailed to work@lakshpradhwani.com. GitGuardian "generic password" alert is made-up test PDF
+  passwords in tests/ (no real secrets found in history).
 - 2026-11-28: QA round merged, all checks green, deployed, live site verified, Cloudflare script injection fixed.
 - 2026-11-27: Q&A with Laksh, repo created, scaffold + contracts written, agents dispatched.
 
 <!-- handoff:auto:start -->
 ## Auto: repo state
 
-_Refreshed 28 Nov 2026, 12:13 am IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
+_Refreshed 28 Nov 2026, 12:21 am IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
 
 Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `dc0044b` 2026-11-28 00:13 docs: mark the live link
 - `622a699` 2026-11-28 00:13 docs: handoff for the live release
 - `1969f44` 2026-11-28 00:02 fix(deploy): stop Cloudflare injecting scripts into the page without losing compression
 - `fa2f5dd` 2026-11-27 23:48 chore: deploy with wrangler through npx
@@ -90,7 +93,6 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `b4aaf22` 2026-11-27 23:28 fix(engine): restart a crashed or hung worker and replay the document
 - `011c3a4` 2026-11-27 23:06 fix(phone): landscape and 320px editor layout, dark swatches and safer service worker updates
 - `e3f850d` 2026-11-27 22:42 docs: record Cloudflare Pages project and domain
-- `c2c020b` 2026-11-27 22:37 fix(engine): record an undo step only when the document changed
 
 ### Uncommitted changes at refresh time
 
