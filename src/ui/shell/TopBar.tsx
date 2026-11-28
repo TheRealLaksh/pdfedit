@@ -1,7 +1,7 @@
 /** Top bar: file, history, zoom, page, search, download. */
 import {
   ArrowUUpLeft, ArrowUUpRight, CaretDown, CaretLeft, CaretRight, CaretUpDown, DotsThreeVertical, DownloadSimple,
-  House, ListChecks, MagnifyingGlass, MagnifyingGlassMinus, MagnifyingGlassPlus, SquaresFour,
+  House, ListChecks, MagnifyingGlass, MagnifyingGlassMinus, MagnifyingGlassPlus, SidebarSimple, SquaresFour,
 } from "@phosphor-icons/react";
 import { useState, type FormEvent } from "react";
 import { useStore, type PanelId } from "../../store";
@@ -10,6 +10,7 @@ import { closeDocument, downloadWhenReady } from "./actions";
 import { Button, IconButton } from "./controls";
 import { Logo } from "./Logo";
 import { useShell } from "./uiStore";
+import { useWide } from "./hooks";
 
 export function togglePanel(panel: PanelId): void {
   const state = useStore.getState();
@@ -79,6 +80,10 @@ export function TopBar({ desktop }: { desktop: boolean }) {
   const menuOpen = useShell((s) => s.menuOpen);
   const setMenu = useShell((s) => s.setMenu);
   const zoom = useZoom();
+  const wide = useWide();
+  const sidebar = useShell((s) => s.sidebar);
+  const setSidebar = useShell((s) => s.setSidebar);
+  const signed = doc.signed;
 
   const history = (
     <div className="sh-group">
@@ -97,12 +102,14 @@ export function TopBar({ desktop }: { desktop: boolean }) {
           <span className="sh-sr">Changes not downloaded</span>
         </span>
       )}
+      {signed && desktop && <span className="sh-badge" title="This PDF is digitally signed">Signed</span>}
     </>
   );
 
   if (!desktop)
     return (
       <header className="sh-top">
+        <h1 className="sh-sr">{doc.fileName}</h1>
         <IconButton icon={House} label="Close document" onClick={() => void closeDocument()} />
         <button
           type="button"
@@ -113,6 +120,7 @@ export function TopBar({ desktop }: { desktop: boolean }) {
           <span className="sh-filename-line">{name}</span>
           <span className="sh-filename-sub">
             Page {page + 1} of {doc.pageCount}
+            {dirty ? ", not saved" : signed ? ", signed" : ""}
             <CaretUpDown size={12} aria-hidden />
           </span>
         </button>
@@ -135,6 +143,9 @@ export function TopBar({ desktop }: { desktop: boolean }) {
         <Logo />
       </button>
       <h1 className="sh-filename">{name}</h1>
+      {wide && doc.pageCount > 1 && (
+        <IconButton icon={SidebarSimple} label="Page thumbnails" hint="B" pressed={sidebar} onClick={() => setSidebar(!sidebar)} />
+      )}
       <Button variant="ghost" icon={SquaresFour} aria-pressed={panel === "pages"} onClick={() => togglePanel("pages")}>
         Pages
       </Button>

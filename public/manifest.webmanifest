@@ -6,10 +6,25 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#f4f4f2",
-  "theme_color": "#f4f4f2",
+  "background_color": "#eceef1",
+  "theme_color": "#eceef1",
   "lang": "en",
   "categories": ["productivity", "utilities"],
+  "file_handlers": [
+    {
+      "action": "/",
+      "accept": {
+        "application/pdf": [".pdf"],
+        "image/png": [".png"],
+        "image/jpeg": [".jpg", ".jpeg"],
+        "image/webp": [".webp"]
+      }
+    }
+  ],
+  "screenshots": [
+    { "src": "/screenshots/phone.png", "type": "image/png", "sizes": "824x1678", "form_factor": "narrow", "label": "Changing a line of a PDF on a phone" },
+    { "src": "/screenshots/desktop.png", "type": "image/png", "sizes": "1366x800", "form_factor": "wide", "label": "A PDF open in the editor on a computer" }
+  ],
   "icons": [
     { "src": "/icon.svg", "type": "image/svg+xml", "sizes": "any" },
     { "src": "/icons/icon-192.png", "type": "image/png", "sizes": "192x192" },

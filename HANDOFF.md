@@ -98,6 +98,7 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `7487e0e` 2026-11-28 17:10 feat(viewer): real font preview and picker, overflow fit, form filling, fill marks, menus and keyboard use
 - `aa564f2` 2026-11-28 16:41 feat(image): edit the text inside pictures with matched fonts and rebuilt backgrounds
 - `4135e0c` 2026-11-28 16:03 feat(engine): real preview fonts, size-limited export, drafts, private image metadata stripped
 - `9e68e69` 2026-11-28 09:21 docs: build plan from the research round
@@ -112,90 +113,61 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `dc0044b` 2026-11-28 00:13 docs: mark the live link
 - `622a699` 2026-11-28 00:13 docs: handoff for the live release
 - `1969f44` 2026-11-28 00:02 fix(deploy): stop Cloudflare injecting scripts into the page without losing compression
-- `fa2f5dd` 2026-11-27 23:48 chore: deploy with wrangler through npx
 
 ### Uncommitted changes at refresh time
 
 ```
-M index.html
- M public/manifest.webmanifest
- M public/robots.txt
- M public/sw.js
- M public/theme.js
- M src/App.tsx
- M src/main.tsx
- M src/store/index.ts
- M src/ui/shell/Dialogs.tsx
- M src/ui/shell/Feedback.tsx
- M src/ui/shell/Panel.tsx
- M src/ui/shell/StartScreen.tsx
- M src/ui/shell/ToolBars.tsx
- M src/ui/shell/TopBar.tsx
- M src/ui/shell/actions.ts
- M src/ui/shell/backGuard.ts
- M src/ui/shell/hooks.ts
- M src/ui/shell/panels/AboutPanel.tsx
- M src/ui/shell/panels/ExportPanel.tsx
- M src/ui/shell/panels/FindPanel.tsx
- M src/ui/shell/panels/OcrPanel.tsx
- M src/ui/shell/panels/PagesPanel.tsx
- M src/ui/shell/pwa.ts
- M src/ui/shell/shell.css
- M src/ui/shell/tools.ts
- M src/ui/shell/uiStore.ts
- M src/ui/shell/util.ts
- M src/ui/tokens.css
-A  src/ui/viewer/ContextMenu.tsx
-M  src/ui/viewer/Overlays.tsx
-M  src/ui/viewer/PageView.tsx
-M  src/ui/viewer/Viewer.tsx
-A  src/ui/viewer/actions.ts
-M  src/ui/viewer/device.ts
-A  src/ui/viewer/editor/FitChip.tsx
-A  src/ui/viewer/editor/FontPicker.tsx
-M  src/ui/viewer/editor/PhoneBar.tsx
-M  src/ui/viewer/editor/StyleBar.tsx
-M  src/ui/viewer/editor/TextEditor.tsx
-M  src/ui/viewer/editor/controller.ts
-A  src/ui/viewer/editor/fontFaces.ts
-A  src/ui/viewer/editor/fontName.ts
-M  src/ui/viewer/editor/textMetrics.ts
-A  src/ui/viewer/editor/useFit.ts
-M  src/ui/viewer/geometry.ts
-M  src/ui/viewer/layers/EditTextLayer.tsx
-A  src/ui/viewer/layers/FormLayer.tsx
-M  src/ui/viewer/layers/PlaceLayer.tsx
-M  src/ui/viewer/layers/SelectLayer.tsx
-M  src/ui/viewer/pageData.ts
-A  src/ui/viewer/useShortcuts.ts
-M  src/ui/viewer/useViewport.ts
-M  src/ui/viewer/viewer.css
-M  src/ui/viewer/viewerStore.ts
-M  tests/device/android.mjs
-M  tests/device/phone.mjs
- M tests/e2e/document.spec.ts
-M  tests/e2e/edit.spec.ts
- M tests/e2e/helpers.ts
-M  tests/e2e/objects.spec.ts
- M tests/e2e/ui.spec.ts
-?? public/404.html
-?? public/fonts/
-?? public/og.png
-?? public/sample.pdf
-?? public/screenshots/
-?? public/sitemap.xml
-?? scripts/make-previews.mjs
-?? scripts/make-sample.mjs
-?? src/ui/shell/Drafts.tsx
-?? src/ui/shell/FinishSheet.tsx
-?? src/ui/shell/Install.tsx
-?? src/ui/shell/Shortcuts.tsx
-?? src/ui/shell/Sidebar.tsx
-?? src/ui/shell/boot.ts
-?? src/ui/shell/errors.ts
-?? src/ui/shell/incoming.ts
-?? src/ui/shell/strings.ts
-?? src/ui/shell/swipe.ts
-?? tests/e2e/shell.spec.ts
+M  index.html
+A  public/404.html
+A  public/fonts/OFL.txt
+A  public/fonts/caslon-400.ttf
+M  public/manifest.webmanifest
+A  public/og.png
+M  public/robots.txt
+A  public/sample.pdf
+A  public/screenshots/desktop.png
+A  public/screenshots/phone.png
+A  public/sitemap.xml
+M  public/sw.js
+M  public/theme.js
+A  scripts/make-previews.mjs
+A  scripts/make-sample.mjs
+M  src/App.tsx
+M  src/main.tsx
+M  src/store/index.ts
+M  src/ui/shell/Dialogs.tsx
+A  src/ui/shell/Drafts.tsx
+M  src/ui/shell/Feedback.tsx
+A  src/ui/shell/FinishSheet.tsx
+A  src/ui/shell/Install.tsx
+M  src/ui/shell/Panel.tsx
+A  src/ui/shell/Shortcuts.tsx
+A  src/ui/shell/Sidebar.tsx
+M  src/ui/shell/StartScreen.tsx
+M  src/ui/shell/ToolBars.tsx
+M  src/ui/shell/TopBar.tsx
+M  src/ui/shell/actions.ts
+M  src/ui/shell/backGuard.ts
+A  src/ui/shell/boot.ts
+A  src/ui/shell/errors.ts
+M  src/ui/shell/hooks.ts
+A  src/ui/shell/incoming.ts
+M  src/ui/shell/panels/AboutPanel.tsx
+M  src/ui/shell/panels/ExportPanel.tsx
+M  src/ui/shell/panels/FindPanel.tsx
+M  src/ui/shell/panels/OcrPanel.tsx
+M  src/ui/shell/panels/PagesPanel.tsx
+M  src/ui/shell/pwa.ts
+M  src/ui/shell/shell.css
+A  src/ui/shell/strings.ts
+A  src/ui/shell/swipe.ts
+M  src/ui/shell/tools.ts
+M  src/ui/shell/uiStore.ts
+M  src/ui/shell/util.ts
+M  src/ui/tokens.css
+M  tests/e2e/document.spec.ts
+M  tests/e2e/helpers.ts
+A  tests/e2e/shell.spec.ts
+M  tests/e2e/ui.spec.ts
 ```
 <!-- handoff:auto:end -->

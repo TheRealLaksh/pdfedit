@@ -1,20 +1,58 @@
-/** The first screen: choose or drop a file. */
-import { DeviceMobile, FilePdf, FolderOpen, Info, ShieldCheck, TextAa, Translate } from "@phosphor-icons/react";
+/** The first screen: choose or drop a file. The copy below the fold also says what the app does to a search engine. */
+import { DeviceMobile, FileText, FolderOpen, Info, ShieldCheck, WarningCircle, X } from "@phosphor-icons/react";
+import { useState } from "react";
 import { useStore } from "../../store";
-import { OPEN_ACCEPT, pickFiles } from "./actions";
-import { Button, IconButton, ThemeButton } from "./controls";
+import { OPEN_ACCEPT, openSample, pickFiles } from "./actions";
+import { useBoot } from "./boot";
+import { Button, IconButton, Progress, ThemeButton } from "./controls";
+import { DraftCard } from "./Drafts";
+import { useInstall } from "./Install";
 import { Logo } from "./Logo";
+import { INSTALL, START } from "./strings";
+import { remember, remembered } from "./uiStore";
 
-const POINTS = [
-  { icon: TextAa, title: "Edit the words already there", text: "Tap a line and retype it. Font, size and colour are kept wherever the file allows." },
-  { icon: Translate, title: "Any language, scans too", text: "Right-to-left and Indic scripts included. Text recognition for scanned pages runs in your browser." },
-  { icon: DeviceMobile, title: "Free, no account", text: "Pages, forms, signatures and redaction, on a phone or a computer." },
-];
+/** offered once there is a reason to come back: after a first finished file */
+function InstallOffer() {
+  const install = useInstall();
+  const [hidden, setHidden] = useState(() => !remembered("finished-once", false) || remembered("install-dismissed", false));
+  if (!install || hidden) return null;
+  return (
+    <aside className="sh-offer">
+      <DeviceMobile size={22} aria-hidden />
+      <p>{INSTALL.offer}</p>
+      <Button onClick={install}>{INSTALL.action}</Button>
+      <IconButton
+        icon={X}
+        size={18}
+        label={INSTALL.later}
+        onClick={() => {
+          remember("install-dismissed", true);
+          setHidden(true);
+        }}
+      />
+    </aside>
+  );
+}
+
+/** shown only while the first download is on its way: a file can be chosen all the same */
+function EngineProgress() {
+  const percent = useBoot((s) => (s.ready ? null : s.percent));
+  const busy = useStore((s) => s.busy !== null);
+  if (percent === null || busy) return null;
+  return (
+    <div className="sh-boot">
+      <span>Getting the editor ready, {percent}%</span>
+      <Progress value={percent / 100} label="Editor download" />
+    </div>
+  );
+}
 
 export function StartScreen() {
   const openFiles = useStore((s) => s.openFiles);
   const openPanel = useStore((s) => s.openPanel);
   const busy = useStore((s) => s.busy);
+  const error = useStore((s) => s.openError);
+  const install = useInstall();
   const choose = async () => {
     const files = await pickFiles(OPEN_ACCEPT, true);
     if (files.length) await openFiles(files);
@@ -24,7 +62,7 @@ export function StartScreen() {
       <header className="sh-start-head">
         <span className="sh-brand">
           <Logo />
-          PDFEdit
+          {START.name}
         </span>
         <span className="sh-row">
           <ThemeButton />
@@ -33,50 +71,99 @@ export function StartScreen() {
       </header>
 
       <main className="sh-start-main">
-        <h1>Edit the text in any PDF</h1>
-        <p className="sh-lead">Tap a line, retype it, download. It keeps its place and its style.</p>
+        <DraftCard />
+        {error && (
+          <div className="sh-openerror" role="alert">
+            <WarningCircle size={22} weight="fill" aria-hidden />
+            <p className="sh-break">{error}</p>
+            <Button onClick={choose} disabled={!!busy}>
+              Choose another file
+            </Button>
+          </div>
+        )}
 
-        <div
-          className="sh-dropzone"
-          // the whole card is a bigger target for pointers; the button inside serves the keyboard
+        {/* the page is the product: a sheet of paper whose headline is being edited */}
+        <section
+          className="sh-sheetcard"
+          // the whole sheet is a bigger target for pointers; the buttons inside serve the keyboard
           onClick={(e) => {
-            if (!(e.target as HTMLElement).closest("button") && !busy) void choose();
+            if (!(e.target as HTMLElement).closest("button") && !busy && !window.getSelection()?.toString()) void choose();
           }}
         >
-          <FilePdf size={40} weight="light" aria-hidden />
-          <Button variant="primary" icon={FolderOpen} onClick={choose} disabled={!!busy}>
-            Choose file
-          </Button>
-          <p className="sh-hint">
-            <span className="sh-fine-only">or drop it here. </span>PDF, or photos to turn into a PDF.
+          <div className="sh-textbox">
+            <h1>{START.title}</h1>
+          </div>
+          <p className="sh-lead">{START.lead}</p>
+          <div className="sh-start-actions">
+            <Button variant="primary" icon={FolderOpen} onClick={choose} disabled={!!busy}>
+              {START.choose}
+            </Button>
+            <Button icon={FileText} onClick={() => void openSample()} disabled={!!busy}>
+              {START.sample}
+            </Button>
+          </div>
+          <p className="sh-accepts">
+            {START.accepts} <span className="sh-fine-only">You can also drop one here.</span>
           </p>
-        </div>
+          <p className="sh-privacy">
+            <ShieldCheck size={20} aria-hidden />
+            <span>{START.privacy}</span>
+          </p>
+          <EngineProgress />
+          <ul className="sh-scripts" aria-hidden>
+            {START.scripts.map((s) => (
+              <li key={s.lang} lang={s.lang} dir={s.dir}>
+                {s.text}
+              </li>
+            ))}
+          </ul>
+        </section>
 
-        <p className="sh-privacy">
-          <ShieldCheck size={20} aria-hidden />
-          <span>Processed on your device. Your file is never uploaded.</span>
-        </p>
+        <InstallOffer />
 
-        <ul className="sh-points">
-          {POINTS.map((p) => (
-            <li key={p.title}>
-              <p.icon size={22} aria-hidden />
-              <div>
-                <h2>{p.title}</h2>
-                <p>{p.text}</p>
+        <section className="sh-about-start" aria-labelledby="sh-how">
+          <h2 id="sh-how">{START.stepsTitle}</h2>
+          <ol className="sh-steps">
+            {START.steps.map((s) => (
+              <li key={s.title}>
+                <h3>{s.title}</h3>
+                <p>{s.text}</p>
+              </li>
+            ))}
+          </ol>
+          <h2>{START.moreTitle}</h2>
+          <dl className="sh-facts">
+            {START.more.map((m) => (
+              <div key={m.title}>
+                <dt>{m.title}</dt>
+                <dd>{m.text}</dd>
               </div>
-            </li>
-          ))}
-        </ul>
+            ))}
+          </dl>
+          <h2>{START.questionsTitle}</h2>
+          <div className="sh-faq">
+            {START.questions.map((f) => (
+              <details key={f.q}>
+                <summary>{f.q}</summary>
+                <p>{f.a}</p>
+              </details>
+            ))}
+          </div>
+        </section>
       </main>
 
       <footer className="sh-start-foot">
         <a href="https://github.com/TheRealLaksh/pdfedit" target="_blank" rel="noreferrer">
-          Open source (AGPL)
+          {START.source}
         </a>
         <a href="https://lakshpradhwani.com" target="_blank" rel="noreferrer">
-          Built by Laksh Pradhwani
+          {START.author}
         </a>
+        {install && (
+          <button type="button" className="sh-link" onClick={install}>
+            {INSTALL.action}
+          </button>
+        )}
       </footer>
     </div>
   );

@@ -3,17 +3,19 @@ import { LockKey } from "@phosphor-icons/react";
 import { useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useStore } from "../../store";
 import { Button, PasswordField, Field } from "./controls";
+import { FinishSheet } from "./FinishSheet";
+import { ShortcutsDialog } from "./Shortcuts";
 import { useDialog } from "./hooks";
 import { useShell, type PromptRequest } from "./uiStore";
 
-export function Modal(props: { title: string; children: ReactNode; onClose(): void; icon?: ReactNode }) {
+export function Modal(props: { title: string; children: ReactNode; onClose(): void; icon?: ReactNode; className?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const id = useId();
   useDialog(ref, { modal: true, onClose: props.onClose });
   return (
     <div className="sh-modal">
       <div className="sh-scrim" onClick={props.onClose} />
-      <div ref={ref} className="sh-dialog" role="dialog" aria-modal="true" aria-labelledby={id} tabIndex={-1}>
+      <div ref={ref} className={props.className ? "sh-dialog " + props.className : "sh-dialog"} role="dialog" aria-modal="true" aria-labelledby={id} tabIndex={-1}>
         <h2 id={id} className="sh-dialog-title">
           {props.icon}
           {props.title}
@@ -92,8 +94,12 @@ export function Dialogs() {
   const password = useStore((s) => s.passwordPrompt);
   const confirm = useShell((s) => s.confirm);
   const prompt = useShell((s) => s.prompt);
+  const finish = useShell((s) => s.finish);
+  const keys = useShell((s) => s.keysOpen);
   return (
     <>
+      {finish && <FinishSheet key={finish.copy.stamp} finish={finish} />}
+      {keys && <ShortcutsDialog />}
       {password && <PasswordDialog key={`${password.fileName}:${password.wrong}`} />}
       {confirm && (
         <Modal title={confirm.title} onClose={() => confirm.resolve(null)}>

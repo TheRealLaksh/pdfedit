@@ -3,7 +3,9 @@ import { DownloadSimple, FileImage, FileText, MagnifyingGlass, Warning } from "@
 import { useState, type FormEvent } from "react";
 import { engine } from "../../../engine/client";
 import { saveBytes, useStore } from "../../../store";
+import { canShare, finishDocument } from "../actions";
 import { Button, Check, PasswordField, Segmented } from "../controls";
+import { FINISH } from "../strings";
 import { ask } from "../uiStore";
 import { baseName, errorText } from "../util";
 import { PageScope, usePageScope } from "./PageScope";
@@ -11,7 +13,6 @@ import { PageScope, usePageScope } from "./PageScope";
 export function ExportPanel() {
   const doc = useStore((s) => s.doc)!;
   const busy = useStore((s) => s.busy !== null);
-  const download = useStore((s) => s.download);
   const run = useStore((s) => s.run);
   const openPanel = useStore((s) => s.openPanel);
   const recognised = useStore((s) => s.ocr.done);
@@ -25,7 +26,7 @@ export function ExportPanel() {
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    void download({
+    void finishDocument({
       compress,
       flatten,
       password: protect && password ? password : undefined,
@@ -47,12 +48,21 @@ export function ExportPanel() {
       if (choice !== "go") return;
     }
     try {
+      const made: File[] = [];
       for (const [i, page] of pages.entries()) {
         useStore.setState({ busy: `Preparing image ${i + 1} of ${pages.length}` });
         const bytes = await engine.exportPageImage(page, dpi, format);
-        saveBytes(bytes, `${baseName(doc.fileName)} (page ${page + 1}).${format === "png" ? "png" : "jpg"}`, `image/${format}`);
+        const name = `${baseName(doc.fileName)} (page ${page + 1}).${format === "png" ? "png" : "jpg"}`;
+        saveBytes(bytes, name, `image/${format}`);
+        made.push(new File([bytes as Uint8Array<ArrayBuffer>], name, { type: `image/${format}` }));
         if (i < pages.length - 1) await new Promise((r) => setTimeout(r, 250));
       }
+      // a button of its own: sharing needs a fresh tap
+      if (canShare(made))
+        useStore.getState().toast(made.length === 1 ? "Image saved" : `${made.length} images saved`, "success", {
+          label: FINISH.share,
+          run: () => void navigator.share({ files: made }).catch(() => {}),
+        });
     } catch (e) {
       useStore.getState().toast(errorText(e), "error");
     } finally {

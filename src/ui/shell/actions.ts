@@ -1,7 +1,8 @@
 /** Things the shell can do, shared by the top bar, tool bars, menus and panels. */
-import { engine } from "../../engine/client";
-import type { MutationResult } from "../../engine/types";
-import { toEngineImage, useStore, type ToolId } from "../../store";
+import { clearDraft, engine } from "../../engine/client";
+import type { ExportOptions, MutationResult } from "../../engine/types";
+import { saveBytes, toEngineImage, useStore, type Prepared, type ToolId } from "../../store";
+import { FINISH, SAMPLE } from "./strings";
 import { ask, promptFor, useShell } from "./uiStore";
 import { errorText } from "./util";
 
@@ -52,16 +53,82 @@ export function whenIdle(): Promise<void> {
   );
 }
 
-let downloading = false;
+/** a computer with a mouse saves in one click; elsewhere Share needs a tap of its own, after the file is ready */
+const quickSave = () => window.matchMedia("(min-width: 900px) and (min-height: 480px) and (pointer: fine)").matches;
 
-export async function downloadWhenReady(): Promise<void> {
-  if (downloading) return;
-  downloading = true;
+export const pdfFile = (copy: Prepared) =>
+  new File([copy.bytes as Uint8Array<ArrayBuffer>], copy.name, { type: "application/pdf" });
+
+export function canShare(files: File[]): boolean {
+  try {
+    return typeof navigator.share === "function" && !!navigator.canShare?.({ files });
+  } catch {
+    return false;
+  }
+}
+
+export function saveCopy(copy: Prepared): void {
+  saveBytes(copy.bytes, copy.name);
+  useStore.getState().markSaved(copy);
+}
+
+/** call straight from a tap: the browser refuses to share once the tap is old */
+export function shareCopy(copy: Prepared, done: () => void): void {
+  navigator.share({ files: [pdfFile(copy)] }).then(
+    () => {
+      useStore.getState().markSaved(copy);
+      useStore.getState().toast(FINISH.shared, "success");
+      done();
+    },
+    (e: unknown) => {
+      // closing the share sheet is a choice, not a failure
+      if ((e as Error)?.name !== "AbortError") useStore.getState().toast(FINISH.shareFailed, "error");
+    },
+  );
+}
+
+function showFinish(copy: Prepared, saved: boolean): void {
+  const state = useStore.getState();
+  useShell.getState().setMenu(false);
+  state.openPanel(null);
+  useShell.getState().setFinish({ copy, saved });
+}
+
+let finishing = false;
+
+/** make the finished PDF, then save it or offer to save and share it */
+export async function finishDocument(options?: ExportOptions): Promise<void> {
+  if (finishing) return;
+  finishing = true;
   try {
     await whenIdle();
-    await useStore.getState().download();
+    const copy = await useStore.getState().prepare(options);
+    if (!copy) return;
+    if (!quickSave()) return showFinish(copy, false);
+    saveCopy(copy);
+    // a copy of only some pages has nothing more to offer
+    if (!options?.pages)
+      useStore.getState().toast(FINISH.savedNotice(copy.name), "success", {
+        label: FINISH.options,
+        run: () => showFinish(copy, true),
+      });
   } finally {
-    downloading = false;
+    finishing = false;
+  }
+}
+
+export const downloadWhenReady = () => finishDocument();
+
+/** the sample document that ships with the app */
+export async function openSample(): Promise<void> {
+  try {
+    useStore.setState({ busy: "Opening " + SAMPLE.name, openError: null });
+    const response = await fetch(SAMPLE.url);
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (!response.ok || bytes[0] !== 0x25) throw new Error(String(response.status));
+    await useStore.getState().openBytes(bytes, SAMPLE.name);
+  } catch {
+    useStore.setState({ busy: null, openError: "The sample could not be downloaded. Check your connection, then try again." });
   }
 }
 
@@ -79,7 +146,11 @@ export async function confirmDiscard(action: string): Promise<boolean> {
       { id: "download", label: "Download first", tone: "primary" },
     ],
   });
-  if (choice === "discard") return true;
+  if (choice === "discard") {
+    // thrown away on purpose: it must not come back as a draft
+    void clearDraft();
+    return true;
+  }
   if (choice === "download") {
     await useStore.getState().download();
     return !useStore.getState().dirty;

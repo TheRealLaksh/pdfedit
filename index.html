@@ -3,31 +3,135 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
-    <title>PDFEdit: edit any PDF in your browser</title>
-    <meta name="description" content="Edit the existing text of any PDF in any language, free and private: your file never leaves your device." />
+    <title>Edit PDF Text Free, Same Font, No Sign-up | PDFEdit</title>
+    <meta
+      name="description"
+      content="Change the text already in a PDF and keep its look. Hindi and other languages, scans too. Free, no login, no watermark. Your file stays on your device."
+    />
     <link rel="canonical" href="https://pdfedit.lakshpradhwani.com/" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="preload" href="/fonts/caslon-400.ttf" as="font" type="font/ttf" crossorigin />
     <meta name="color-scheme" content="light dark" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#1c1c1f" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#191c21" media="(prefers-color-scheme: dark)" />
     <meta name="apple-mobile-web-app-title" content="PDFEdit" />
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="PDFEdit: edit any PDF in your browser" />
+    <meta property="og:site_name" content="PDFEdit" />
+    <meta property="og:title" content="PDFEdit: edit the text in any PDF" />
     <meta property="og:description" content="Retype the text that is already in a PDF. Free, no account, and the file never leaves your device." />
     <meta property="og:url" content="https://pdfedit.lakshpradhwani.com/" />
-    <meta property="og:image" content="https://pdfedit.lakshpradhwani.com/icons/icon-512.png" />
+    <meta property="og:image" content="https://pdfedit.lakshpradhwani.com/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="PDFEdit changing one line of a document while the rest of the page stays as it was" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <!-- a data block for search engines, not a script: the CSP does not run it -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          { "@type": "WebSite", "name": "PDFEdit", "url": "https://pdfedit.lakshpradhwani.com/" },
+          {
+            "@type": "WebApplication",
+            "name": "PDFEdit",
+            "url": "https://pdfedit.lakshpradhwani.com/",
+            "applicationCategory": "UtilitiesApplication",
+            "operatingSystem": "Any, in a web browser",
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "INR" },
+            "license": "https://www.gnu.org/licenses/agpl-3.0.html",
+            "author": { "@type": "Person", "name": "Laksh Pradhwani", "url": "https://lakshpradhwani.com/" }
+          }
+        ]
+      }
+    </script>
     <style>
       /* the right background before the stylesheet arrives */
-      html { background: #f4f4f2; }
-      @media (prefers-color-scheme: dark) { html:not([data-theme="light"]) { background: #131315; } }
-      html[data-theme="dark"] { background: #131315; }
+      html { background: #eceef1; }
+      @media (prefers-color-scheme: dark) { html:not([data-theme="light"]) { background: #0f1114; } }
+      html[data-theme="dark"] { background: #0f1114; }
+      /* the offer to reload (public/theme.js) must look right even when the app's styles never arrive */
+      .boot-retry {
+        position: fixed; right: 12px; bottom: 12px; left: 12px; z-index: 100; display: flex; flex-wrap: wrap;
+        align-items: center; justify-content: space-between; gap: 12px; max-width: 480px; margin: 0 auto; padding: 14px 16px;
+        border: 1px solid #808693; border-radius: 12px; background: #fff; color: #16181d; font: 15px/1.45 system-ui, sans-serif;
+      }
+      .boot-retry p { flex: 1 1 200px; margin: 0; }
+      .boot-retry button {
+        min-width: 96px; min-height: 44px; border: 0; border-radius: 8px; background: #2b4fd8; color: #fff; font: 600 15px system-ui, sans-serif;
+      }
     </style>
     <script src="/theme.js"></script>
   </head>
   <body>
-    <div id="root"></div>
+    <!--
+      The start screen as plain HTML: it paints before the app has downloaded and tells search engines what
+      this is. The app replaces it. Keep the words the same as src/ui/shell/strings.ts (tests check).
+    -->
+    <div id="root">
+      <div class="sh-start" data-boot>
+        <header class="sh-start-head">
+          <span class="sh-brand"><img src="/icon.svg" width="28" height="28" alt="" />PDFEdit</span>
+        </header>
+        <main class="sh-start-main">
+          <section class="sh-sheetcard">
+            <div class="sh-textbox"><h1>Edit the text in any PDF</h1></div>
+            <p class="sh-lead">Tap a line, retype it, download. It keeps its font, size and place wherever the file allows.</p>
+            <div class="sh-start-actions">
+              <button type="button" class="sh-btn sh-btn-primary" disabled>Choose file</button>
+              <button type="button" class="sh-btn sh-btn-secondary" disabled>Try a sample</button>
+            </div>
+            <p class="sh-accepts">Opens PDFs and pictures.</p>
+            <p class="sh-privacy"><span>Processed on your device. Your file is never uploaded.</span></p>
+            <p class="sh-boot" role="status">Loading the editor</p>
+            <noscript><p class="sh-boot">PDFEdit needs JavaScript to edit files.</p></noscript>
+          </section>
+          <section class="sh-about-start" aria-labelledby="sh-how">
+            <h2 id="sh-how">How it works</h2>
+            <ol class="sh-steps">
+              <li><h3>Open</h3><p>Choose a PDF or a photo from your phone or computer.</p></li>
+              <li><h3>Retype</h3><p>Tap any line and change it. Sign, fill forms, reorder pages or black things out.</p></li>
+              <li><h3>Save or share</h3><p>Download the new copy, or send it straight from your phone.</p></li>
+            </ol>
+            <h2>What it can do</h2>
+            <dl class="sh-facts">
+              <div><dt>Many languages</dt><dd>Hindi, Marathi, Bengali, Tamil, Telugu, Urdu, Arabic, Hebrew, Chinese, Japanese and more.</dd></div>
+              <div><dt>Scanned pages</dt><dd>Text recognition runs in your browser, so photographed pages can be edited too.</dd></div>
+              <div><dt>Works offline</dt><dd>After the first visit the editor opens without a connection.</dd></div>
+              <div><dt>On a phone</dt><dd>Made for touch first, and just as complete on a computer.</dd></div>
+            </dl>
+            <h2>Questions</h2>
+            <div class="sh-faq">
+              <details>
+                <summary>Does the new text look like the old text?</summary>
+                <p>Unchanged letters keep their original shapes. New letters use the font inside the PDF when it has them, and the closest free font when it does not.</p>
+              </details>
+              <details>
+                <summary>Is it free? Is there a watermark?</summary>
+                <p>It is free, with no account, no page limit and no watermark.</p>
+              </details>
+              <details>
+                <summary>Where does my file go?</summary>
+                <p>Nowhere. The editor runs in your browser and reads the file on your device. Fonts and text recognition data are downloaded when needed.</p>
+              </details>
+              <details>
+                <summary>What are the limits?</summary>
+                <p>Text does not reflow, so a longer line can run into what follows. On scans, changed words are covered, not erased.</p>
+              </details>
+              <details>
+                <summary>Can I edit a signed PDF?</summary>
+                <p>Yes, but the signature will no longer be valid, and PDFEdit says so. Only edit documents you are allowed to change.</p>
+              </details>
+            </div>
+          </section>
+        </main>
+        <footer class="sh-start-foot">
+          <a href="https://github.com/TheRealLaksh/pdfedit" target="_blank" rel="noreferrer">Open source (AGPL)</a>
+          <a href="https://lakshpradhwani.com" target="_blank" rel="noreferrer">Built by Laksh Pradhwani</a>
+        </footer>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

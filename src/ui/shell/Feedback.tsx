@@ -1,12 +1,16 @@
-/** Busy overlay, toasts, drop target and the small status chips (placement, text recognition). */
+/** Busy overlay, notices, drop target, spoken announcements and the small status chips. */
 import { CheckCircle, FileArrowUp, Info, Warning, WarningCircle, X } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import { engineReady } from "../../engine/client";
 import { useStore, type Toast } from "../../store";
+import { useBoot } from "./boot";
 import { Button, IconButton, Progress } from "./controls";
+import { useCompactNotices } from "./hooks";
 
 /** quick edits must not flash a spinner */
 const DELAY = 350;
+/** after this long, say that the wait is still going somewhere */
+const LONG = 5000;
 /**
  * Changes to one thing on a page. Saving them must not cover the screen: the viewer keeps a tap made in the
  * meantime and answers it when the page is ready, so the next line can be picked at once.
@@ -36,27 +40,55 @@ function useDownloadingEditor(waiting: boolean): boolean {
 export function BusyOverlay() {
   const busy = useStore((s) => s.busy);
   const [visible, setVisible] = useState(false);
-  const card = useRef<HTMLDivElement>(null);
+  const [long, setLong] = useState(false);
   const active = busy !== null;
   const quiet = busy !== null && QUIET.has(busy);
-  const slowStart = !!busy && /^(Opening|Preparing|Turning|Adding|Reading)/.test(busy);
+  const slowStart = !!busy && /^(Opening|Preparing|Turning|Adding|Reading|Making)/.test(busy);
   const downloading = useDownloadingEditor(active);
+  const percent = useBoot((s) => s.percent);
 
   useEffect(() => {
+    setLong(false);
     if (!active) {
       setVisible(false);
       return;
     }
     const timer = setTimeout(() => setVisible(true), slowStart ? 60 : quiet ? DELAY * 2 : DELAY);
-    return () => clearTimeout(timer);
+    const later = setTimeout(() => setLong(true), LONG);
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(later);
+    };
   }, [active, slowStart, quiet]);
+
+  // the overlay stops the pointer; the keyboard must not reach the controls behind it either
+  const blocking = visible && active && !quiet;
+  useEffect(() => {
+    if (!blocking) return;
+    const before = document.activeElement as HTMLElement | null;
+    const behind = Array.from(document.querySelectorAll<HTMLElement>(".sh-app, .sh-start, .sh-modal"));
+    for (const node of behind) node.inert = true;
+    return () => {
+      for (const node of behind) node.inert = false;
+      if (before?.isConnected && document.activeElement === document.body) before.focus({ preventScroll: true });
+    };
+  }, [blocking]);
 
   return (
     <div className="sh-busy" data-visible={(visible && active) || undefined} data-quiet={quiet || undefined} role="status" aria-live="polite">
       {visible && busy && (
-        <div ref={card} className="sh-busy-card">
+        <div className="sh-busy-card">
           <span className="sh-spinner" aria-hidden />
-          <span className="sh-break">{downloading ? "Downloading the editor (first visit only)" : busy}…</span>
+          <span className="sh-break">
+            {downloading ? "Downloading the editor (first visit only)" : busy}…
+            {long && !quiet && !downloading && <small>Still working. A font may be downloading.</small>}
+            {downloading && percent !== null && (
+              <>
+                <small>{percent}% of about 5 MB</small>
+                <Progress value={percent / 100} label="Editor download" />
+              </>
+            )}
+          </span>
         </div>
       )}
     </div>
@@ -65,13 +97,54 @@ export function BusyOverlay() {
 
 const ICONS = { info: Info, success: CheckCircle, warning: Warning, error: WarningCircle };
 
-function ToastItem({ toast }: { toast: Toast }) {
+/** how long a passing notice stays, in milliseconds */
+const lifetime = (t: Toast) => (t.kind === "error" || t.kind === "warning" ? 12_000 : t.action ? 10_000 : 6000);
+
+/** counts the notice's time only while it can be read */
+function useExpiry(toast: Toast, paused: boolean) {
   const dismiss = useStore((s) => s.dismissToast);
+  const left = useRef(lifetime(toast));
+  useEffect(() => {
+    if (toast.sticky || paused) return;
+    let since = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const stop = () => {
+      clearTimeout(timer);
+      if (since) left.current -= Date.now() - since;
+      since = 0;
+    };
+    const run = () => {
+      stop();
+      if (document.hidden) return;
+      since = Date.now();
+      // after being held, it stays long enough to be seen again
+      left.current = Math.max(2000, left.current);
+      timer = setTimeout(() => dismiss(toast.id), left.current);
+    };
+    run();
+    document.addEventListener("visibilitychange", run);
+    return () => {
+      document.removeEventListener("visibilitychange", run);
+      stop();
+    };
+  }, [toast.id, toast.sticky, paused, dismiss]);
+}
+
+function ToastItem({ toast, hidden, more }: { toast: Toast; hidden: boolean; more: number }) {
+  const dismiss = useStore((s) => s.dismissToast);
+  const [hover, setHover] = useState(false);
+  const [focus, setFocus] = useState(false);
+  useExpiry(toast, hidden || hover || focus);
   const Glyph = ICONS[toast.kind];
   return (
     <li
       className={`sh-toast sh-toast-${toast.kind}`}
       role={toast.kind === "error" ? "alert" : undefined}
+      hidden={hidden}
+      onPointerEnter={(e) => e.pointerType === "mouse" && setHover(true)}
+      onPointerLeave={() => setHover(false)}
+      onFocus={() => setFocus(true)}
+      onBlur={(e) => !e.currentTarget.contains(e.relatedTarget) && setFocus(false)}
       // a finger on the note puts it away at once, so it is never in the way of the page
       onPointerUp={(e) => {
         if (e.pointerType === "mouse" || (e.target as Element).closest("button")) return;
@@ -87,6 +160,7 @@ function ToastItem({ toast }: { toast: Toast }) {
             type="button"
             className="sh-link"
             onClick={() => {
+              // straight from the click: sharing and file pickers need it
               toast.action!.run();
               dismiss(toast.id);
             }}
@@ -94,6 +168,7 @@ function ToastItem({ toast }: { toast: Toast }) {
             {toast.action.label}
           </button>
         )}
+        {more > 0 && <small className="sh-toast-more">{more === 1 ? "1 more notice" : `${more} more notices`}</small>}
       </div>
       <IconButton icon={X} size={18} label="Dismiss notice" onClick={() => dismiss(toast.id)} />
     </li>
@@ -102,12 +177,30 @@ function ToastItem({ toast }: { toast: Toast }) {
 
 export function Toasts() {
   const toasts = useStore((s) => s.toasts);
+  const editing = useStore((s) => s.editing !== null);
+  const compact = useCompactNotices();
+  // phones show one at a time, the newest; errors always show
+  const newest = [...toasts].reverse().find((t) => t.kind !== "error");
+  const waiting = compact ? toasts.filter((t) => t.kind !== "error" && t !== newest).length : 0;
   return (
     <ol className="sh-toasts" aria-live="polite" aria-label="Notices">
-      {toasts.map((t) => (
-        <ToastItem key={t.id} toast={t} />
-      ))}
+      {toasts.map((t) => {
+        // while a line is being typed only errors may appear: nothing else is worth covering the page for
+        const hidden = t.kind !== "error" && (editing || (compact && t !== newest));
+        return <ToastItem key={t.id} toast={t} hidden={hidden} more={t === newest ? waiting : 0} />;
+      })}
     </ol>
+  );
+}
+
+/** tells screen readers what changed, because the page itself is a picture to them */
+export function Announcer() {
+  const { text, nonce } = useStore((s) => s.announcement);
+  return (
+    <div className="sh-sr" role="status" aria-live="polite" data-testid="announcer">
+      {/* a new node each time, so the same words are read again */}
+      <span key={nonce}>{text}</span>
+    </div>
   );
 }
 

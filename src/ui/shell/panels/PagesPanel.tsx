@@ -32,7 +32,7 @@ function renderThumb(key: string, page: number, scale: number, wanted: () => boo
   return job;
 }
 
-function Thumb({ page }: { page: number }) {
+export function Thumb({ page }: { page: number }) {
   const info = useStore((s) => s.doc!.pages[page]!);
   const session = useStore((s) => s.session);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -81,6 +81,17 @@ function Thumb({ page }: { page: number }) {
 }
 
 /* ---------- reordering ---------- */
+
+export async function deletePagesWithUndo(pages: number[]): Promise<boolean> {
+  const n = pages.length;
+  const result = await useStore.getState().run("Deleting pages", () => engine.deletePages(pages));
+  if (!result) return false;
+  useStore.getState().toast(`Deleted ${n} ${n === 1 ? "page" : "pages"}`, "success", {
+    label: "Undo",
+    run: () => void useStore.getState().undo(),
+  });
+  return true;
+}
 
 /** new order after moving `moving` so that it sits before the old index `before` */
 export function orderAfterMove(count: number, moving: number[], before: number): number[] {
@@ -207,13 +218,13 @@ export function PagesPanel() {
   const rotate = (degrees: 90 | 270) => void run("Rotating", () => engine.rotatePages(selected, degrees));
 
   const remove = async () => {
-    const n = selected.length;
-    const result = await run("Deleting pages", () => engine.deletePages(selected));
-    if (!result) return;
+    const first = selected[0]!;
+    if (!(await deletePagesWithUndo(selected))) return;
     setPicked([]);
-    useStore.getState().toast(`Deleted ${n} ${n === 1 ? "page" : "pages"}`, "success", {
-      label: "Undo",
-      run: () => void useStore.getState().undo(),
+    // the buttons that were just used are gone: carry on from the page that took the first one's place
+    requestAnimationFrame(() => {
+      const left = useStore.getState().doc!.pageCount;
+      grid.current?.querySelector<HTMLElement>(`[data-page="${Math.min(first, left - 1)}"] button`)?.focus();
     });
   };
 

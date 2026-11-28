@@ -1,7 +1,11 @@
 /** Privacy, honest limits and credits. */
-import { GithubLogo } from "@phosphor-icons/react";
-import { ThemePicker } from "../controls";
+import { DeviceMobile, GithubLogo, Keyboard } from "@phosphor-icons/react";
+import { Button, ThemePicker } from "../controls";
+import { DraftSwitch } from "../Drafts";
 import { useDesktop } from "../hooks";
+import { InstallItem } from "../Install";
+import { INSTALL, KEYS } from "../strings";
+import { useShell } from "../uiStore";
 
 const LIMITS = [
   "Fonts inside a PDF often contain only the characters already used. New characters may be drawn with the closest free font, and you are told when that happens.",
@@ -10,18 +14,8 @@ const LIMITS = [
   "Any change to a digitally signed PDF invalidates the signature. The export date is recorded as usual.",
   "Very large files depend on your device’s memory.",
   "Whiteout only covers content. Use Redact to remove it for good, and check the downloaded copy.",
+  "Text does not reflow, so a longer line can run into what follows. On scans, changed words are covered, not erased.",
   "Dynamic XFA forms are not supported.",
-];
-
-const SHORTCUTS = [
-  ["Ctrl+O", "Open a file"],
-  ["Ctrl+S", "Download"],
-  ["Ctrl+F", "Find and replace"],
-  ["Ctrl+Z / Ctrl+Y", "Undo / redo"],
-  ["Ctrl+Plus / Minus / 0", "Zoom in, out, fit"],
-  ["Delete", "Remove the selected item or pages"],
-  ["Arrows (+ Shift)", "Move the selected item"],
-  ["Esc", "Close or cancel"],
 ];
 
 export function AboutPanel() {
@@ -38,6 +32,7 @@ export function AboutPanel() {
           Fonts and text recognition data are downloaded from the jsDelivr public CDN when needed. Those requests show
           which font or language is wanted, never your document. Saved signatures and settings stay in this browser.
         </p>
+        <DraftSwitch />
         <h3>Limits</h3>
         <ul>
           {LIMITS.map((l) => (
@@ -45,24 +40,22 @@ export function AboutPanel() {
           ))}
         </ul>
         {desktop && (
-          <>
-            <h3>Keyboard</h3>
-            <dl className="sh-keys">
-              {SHORTCUTS.map(([key, what]) => (
-                <div key={key}>
-                  <dt>
-                    <kbd translate="no">{key}</kbd>
-                  </dt>
-                  <dd>{what}</dd>
-                </div>
-              ))}
-            </dl>
-          </>
+          <Button icon={Keyboard} block onClick={() => useShell.getState().setKeysOpen(true)}>
+            {KEYS.open}
+          </Button>
         )}
+        <InstallItem
+          render={(run) => (
+            <Button icon={DeviceMobile} block onClick={run}>
+              {INSTALL.action}
+            </Button>
+          )}
+        />
         <ThemePicker />
         <h3>Open source</h3>
         <p>
-          Free software under the GNU AGPL v3, built on MuPDF, HarfBuzz and Tesseract. Built by{" "}
+          Free software under the GNU AGPL v3, built on MuPDF, HarfBuzz and Tesseract. The headline type is Libre
+          Caslon (SIL Open Font License). Built by{" "}
           <a href="https://lakshpradhwani.com" target="_blank" rel="noreferrer">
             Laksh Pradhwani
           </a>

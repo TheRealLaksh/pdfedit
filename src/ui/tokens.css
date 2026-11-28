@@ -1,20 +1,26 @@
-/* Design tokens shared by viewer and shell. SHELL module may add tokens; never rename these. */
+/*
+ * Design tokens shared by viewer, shell and image editor. SHELL module may add tokens; never rename these.
+ *
+ * "Desk and ink": a cool desk, white paper, near-black ink and one cobalt accent. Chrome and paper must
+ * read as different things in both themes, so the desk is a clear step away from every surface.
+ * Text pairs are at least 4.5:1, borders of form controls at least 3:1.
+ */
 :root {
-  --bg: #f4f4f2;
+  --bg: #eceef1;
   --surface: #ffffff;
-  --surface-2: #f0f0ee;
-  --text: #17171a;
-  --muted: #63636b;
-  --border: #e2e2de;
-  --accent: #2f5bea;
+  --surface-2: #f2f3f5;
+  --text: #16181d;
+  --muted: #545a66;
+  --border: #dcdfe5;
+  --accent: #2b4fd8;
   --accent-text: #ffffff;
-  --accent-soft: #e8edfd;
-  --danger: #c0352b;
-  --warning: #9a6200;
-  --success: #1d7a4a;
-  --radius: 10px;
-  --radius-sm: 7px;
-  --shadow: 0 6px 24px rgb(0 0 0 / 0.1);
+  --accent-soft: #e6ebfc;
+  --danger: #b3261e;
+  --warning: #845200;
+  --success: #17693f;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 0 0 1px rgb(16 20 30 / 0.06), 0 6px 18px -4px rgb(16 20 30 / 0.18);
   --toolbar-h: 52px;
   --bottombar-h: 64px;
   --tap: 44px;
@@ -22,42 +28,19 @@
   color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #131315;
-    --surface: #1c1c1f;
-    --surface-2: #26262a;
-    --text: #ececef;
-    --muted: #9c9ca6;
-    --border: #303036;
-    --accent: #7c9bff;
-    --accent-text: #0d1330;
-    --accent-soft: #23294a;
-    --danger: #ff8077;
-    --warning: #e8b35a;
-    --success: #62cf97;
-    color-scheme: dark;
-  }
-}
-
-:root[data-theme="dark"] {
-  --bg: #131315;
-  --surface: #1c1c1f;
-  --surface-2: #26262a;
-  --text: #ececef;
-  --muted: #9c9ca6;
-  --border: #303036;
-  --accent: #7c9bff;
-  --accent-text: #0d1330;
-  --accent-soft: #23294a;
-  --danger: #ff8077;
-  --warning: #e8b35a;
-  --success: #62cf97;
-  color-scheme: dark;
-}
-
 /* ---------- shell additions (SHELL module) ---------- */
 :root {
+  --surface-raised: #ffffff;
+  --surface-3: #e6e9ee;
+  --selected: #ffffff;
+  --accent-hover: #2242b8;
+  --control-border: #808693;
+  /* marks on white paper: the same in both themes, because pages stay white */
+  --mark: #2b4fd8;
+  --paper: #ffffff;
+  --ink: #16181d;
+  --ink-muted: #545a66;
+  --space-0: 2px;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -65,10 +48,29 @@
   --space-5: 24px;
   --space-6: 32px;
   --space-7: 48px;
-  --radius-lg: 16px;
+  --radius-xs: 4px;
+  --radius-lg: 20px;
+  --radius-full: 999px;
+  --ctl-sm: 36px;
+  --ctl-lg: 52px;
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-md: 0.9375rem;
+  --text-lg: 1.0625rem;
+  --text-xl: 1.25rem;
+  /* the headline and the name only; self hosted (SIL OFL 1.1, public/fonts/OFL.txt) */
+  --font-display: "PDFEdit Caslon", "Libre Caslon Text", Georgia, "Times New Roman", serif;
+  --elev-1: 0 0 0 1px rgb(16 20 30 / 0.07), 0 1px 3px rgb(16 20 30 / 0.1);
+  --elev-2: var(--shadow);
+  --elev-3: 0 -8px 32px -8px rgb(16 20 30 / 0.24);
+  --dur-press: 80ms;
+  --dur-fast: 140ms;
+  --dur-med: 240ms;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
   --rail-w: 60px;
   --panel-w: 352px;
-  --scrim: rgb(15 15 18 / 0.42);
+  --sidebar-w: 168px;
+  --scrim: rgb(14 17 24 / 0.44);
   --focus: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
@@ -79,18 +81,56 @@
   --z-dialog: 60;
   --z-busy: 70;
   --z-toast: 80;
-  /* border strong enough (3:1) for form controls */
-  --control-border: #8a8a92;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --scrim: rgb(0 0 0 / 0.6);
-    --control-border: #6c6c76;
+    --bg: #0f1114;
+    --surface: #191c21;
+    --surface-raised: #20242b;
+    --surface-2: #262a32;
+    --surface-3: #303540;
+    --selected: #3a414d;
+    --text: #e8eaee;
+    --muted: #a4abb7;
+    --border: #323843;
+    --control-border: #7f8796;
+    --accent: #8fa8ff;
+    --accent-hover: #a8bbff;
+    --accent-text: #0b1330;
+    --accent-soft: #252e50;
+    --danger: #ff8f85;
+    --warning: #e9b665;
+    --success: #6bd29b;
+    --shadow: 0 0 0 1px #323843, 0 8px 22px -4px rgb(0 0 0 / 0.6);
+    --elev-1: 0 0 0 1px rgb(0 0 0 / 0.5), 0 1px 3px rgb(0 0 0 / 0.5);
+    --elev-3: 0 -1px 0 #323843, 0 -10px 36px -8px rgb(0 0 0 / 0.65);
+    --scrim: rgb(0 0 0 / 0.62);
+    color-scheme: dark;
   }
 }
 
 :root[data-theme="dark"] {
-  --scrim: rgb(0 0 0 / 0.6);
-  --control-border: #6c6c76;
+  --bg: #0f1114;
+  --surface: #191c21;
+  --surface-raised: #20242b;
+  --surface-2: #262a32;
+  --surface-3: #303540;
+  --selected: #3a414d;
+  --text: #e8eaee;
+  --muted: #a4abb7;
+  --border: #323843;
+  --control-border: #7f8796;
+  --accent: #8fa8ff;
+  --accent-hover: #a8bbff;
+  --accent-text: #0b1330;
+  --accent-soft: #252e50;
+  --danger: #ff8f85;
+  --warning: #e9b665;
+  --success: #6bd29b;
+  --shadow: 0 0 0 1px #323843, 0 8px 22px -4px rgb(0 0 0 / 0.6);
+  --elev-1: 0 0 0 1px rgb(0 0 0 / 0.5), 0 1px 3px rgb(0 0 0 / 0.5);
+  --elev-3: 0 -1px 0 #323843, 0 -10px 36px -8px rgb(0 0 0 / 0.65);
+  --scrim: rgb(0 0 0 / 0.62);
+  color-scheme: dark;
 }

@@ -1,20 +1,24 @@
 /** App shell. Owner: SHELL module. */
-import { lazy, Suspense, useEffect, useLayoutEffect } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef } from "react";
 import { useStore } from "./store";
 import { downloadWhenReady, dropOnDocument, openAnother } from "./ui/shell/actions";
 import { useBackGuard } from "./ui/shell/backGuard";
 import { Dialogs } from "./ui/shell/Dialogs";
-import { BusyOverlay, DropTarget, StatusChips, Toasts } from "./ui/shell/Feedback";
-import { useDesktop, useViewportVars } from "./ui/shell/hooks";
+import { Announcer, BusyOverlay, DropTarget, StatusChips, Toasts } from "./ui/shell/Feedback";
+import { useDesktop, useViewportVars, useWide } from "./ui/shell/hooks";
+import { acceptIncomingFiles } from "./ui/shell/incoming";
 import { Panel } from "./ui/shell/Panel";
 import { registerServiceWorker } from "./ui/shell/pwa";
+import { useToolKeys } from "./ui/shell/Shortcuts";
+import { Sidebar } from "./ui/shell/Sidebar";
 import { StartScreen } from "./ui/shell/StartScreen";
 import { useToolColors } from "./ui/shell/toolColors";
 import { BottomBar, MoreMenu, ToolOptions, ToolRail } from "./ui/shell/ToolBars";
 import { togglePanel, TopBar } from "./ui/shell/TopBar";
-import { useShell } from "./ui/shell/uiStore";
+import { remember, useShell } from "./ui/shell/uiStore";
 import { Viewer } from "./ui/viewer/Viewer";
 import { useViewer } from "./ui/viewer/viewerStore";
+import { HINT } from "./ui/shell/strings";
 import "./ui/shell/shell.css";
 
 function useTheme() {
@@ -86,6 +90,32 @@ function useNoAppZoom(active: boolean) {
   }, [active]);
 }
 
+/** closing a panel must not leave the keyboard at the top of the page */
+function useFocusReturn() {
+  const panel = useStore((s) => s.panel);
+  const before = useRef(panel);
+  useEffect(() => {
+    const closed = before.current && !panel;
+    before.current = panel;
+    if (!closed) return;
+    // after the panel's own attempt to give the focus back
+    const frame = requestAnimationFrame(() => {
+      if (document.activeElement === document.body) document.getElementById("sh-document")?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [panel]);
+}
+
+/** a PDF with form fields says so once, with the list one tap away */
+function useFormOffer() {
+  const session = useStore((s) => s.session);
+  useEffect(() => {
+    const { doc, toast, toasts, openPanel } = useStore.getState();
+    // never in front of a warning about the file
+    if (doc?.hasForms && !toasts.length) toast(HINT.form, "info", { label: HINT.fill, run: () => openPanel("forms") });
+  }, [session]);
+}
+
 function Editor({ desktop }: { desktop: boolean }) {
   const editing = useStore((s) => s.editing !== null);
   // phones: between two lines the keyboard and its bar stay, so the tool bar must not flash back
@@ -96,6 +126,11 @@ function Editor({ desktop }: { desktop: boolean }) {
   const panel = useStore((s) => s.panel);
   const fileName = useStore((s) => s.doc!.fileName);
   const menuOpen = useShell((s) => s.menuOpen);
+  const many = useStore((s) => s.doc!.pageCount > 1);
+  const sidebar = useShell((s) => s.sidebar);
+  const wide = useWide();
+  useFocusReturn();
+  useFormOffer();
 
   useEffect(() => {
     const before = document.title;
@@ -121,6 +156,7 @@ function Editor({ desktop }: { desktop: boolean }) {
       <TopBar desktop={desktop} />
       <div className="sh-body">
         {desktop && <ToolRail />}
+        {desktop && wide && many && sidebar && panel !== "pages" && <Sidebar />}
         <main className="sh-main" id="sh-document" tabIndex={-1}>
           <div className="sh-viewer">
             <Viewer />
@@ -148,15 +184,26 @@ export function App() {
   useTheme();
   useViewportVars();
   useShortcuts();
+  useToolKeys();
   useUnsavedWarning();
   useToolColors();
   useBackGuard(!desktop);
   useNoAppZoom(hasDoc);
   useEffect(() => registerServiceWorker(), []);
+  useEffect(() => acceptIncomingFiles(), []);
+  // the first finished file is the moment from which installing is worth suggesting
+  const saved = useStore((s) => s.doc !== null && s.canUndo && !s.dirty);
+  useEffect(() => {
+    if (saved) remember("finished-once", true);
+  }, [saved]);
 
   useEffect(() => {
     document.documentElement.toggleAttribute("data-editor", hasDoc);
-    if (!hasDoc) useShell.getState().setMenu(false);
+    if (!hasDoc) {
+      const shell = useShell.getState();
+      shell.setMenu(false);
+      shell.setFinish(null);
+    }
   }, [hasDoc]);
 
   return (
@@ -180,6 +227,7 @@ export function App() {
       <Dialogs />
       <BusyOverlay />
       <Toasts />
+      <Announcer />
     </>
   );
 }

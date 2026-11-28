@@ -1,6 +1,6 @@
 /** Hosts store.panel: a side panel on desktop, a bottom sheet on phones. */
 import { X } from "@phosphor-icons/react";
-import { useId, useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useId, useRef, type ReactNode } from "react";
 import { useStore, type PanelId } from "../../store";
 import { IconButton } from "./controls";
 import { useDialog } from "./hooks";
@@ -13,6 +13,7 @@ import { OcrPanel } from "./panels/OcrPanel";
 import { PagesPanel } from "./panels/PagesPanel";
 import { SignaturePanel } from "./panels/SignaturePanel";
 import { StampPanel } from "./panels/StampPanel";
+import { useSwipeToClose } from "./swipe";
 import { PANELS } from "./tools";
 
 const CONTENT: Record<PanelId, () => ReactNode> = {
@@ -26,32 +27,6 @@ const CONTENT: Record<PanelId, () => ReactNode> = {
   fonts: () => <FontsPanel />,
   about: () => <AboutPanel />,
 };
-
-/** pull the sheet down by its header to close it */
-function useSwipeToClose(sheet: React.RefObject<HTMLDivElement | null>, close: () => void, enabled: boolean) {
-  const start = useRef<{ y: number; id: number } | null>(null);
-  if (!enabled) return {};
-  const offset = (e: ReactPointerEvent) => Math.max(0, e.clientY - start.current!.y);
-  const finish = (e: ReactPointerEvent, commit: boolean) => {
-    if (!start.current || start.current.id !== e.pointerId) return;
-    const far = offset(e) > 90;
-    start.current = null;
-    if (sheet.current) sheet.current.style.transform = "";
-    if (commit && far) close();
-  };
-  return {
-    onPointerDown(e: ReactPointerEvent) {
-      if ((e.target as HTMLElement).closest("button")) return;
-      start.current = { y: e.clientY, id: e.pointerId };
-      e.currentTarget.setPointerCapture(e.pointerId);
-    },
-    onPointerMove(e: ReactPointerEvent) {
-      if (start.current?.id === e.pointerId && sheet.current) sheet.current.style.transform = `translateY(${offset(e)}px)`;
-    },
-    onPointerUp: (e: ReactPointerEvent) => finish(e, true),
-    onPointerCancel: (e: ReactPointerEvent) => finish(e, false),
-  };
-}
 
 function PanelFrame({ panel, desktop }: { panel: PanelId; desktop: boolean }) {
   const ref = useRef<HTMLDivElement>(null);

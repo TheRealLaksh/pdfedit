@@ -21,6 +21,8 @@ async function audit(page: Page, touch: boolean) {
       if (!shown(el) || el.closest(".pv-sr, .sh-sr, [aria-hidden=true]") || el.classList.contains("sh-skip")) continue;
       // the field laid over a line of the page is as big as the line: taps around it are caught by the page
       if (el.matches("[data-testid=line-editor]")) continue;
+      // so are the form fields tapped on the page; the Fill forms panel offers the same fields full size
+      if (el.matches(".pv-field")) continue;
       const input = el as HTMLInputElement;
       const name = (el.getAttribute("aria-label") || el.getAttribute("aria-labelledby") || el.getAttribute("title") || input.labels?.[0]?.textContent || el.textContent || input.placeholder || "").trim();
       const html = el.outerHTML.slice(0, 90);

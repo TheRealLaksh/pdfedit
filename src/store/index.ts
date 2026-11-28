@@ -3,10 +3,12 @@
  * directly: use the actions here (or `run` for a one-off) so revisions, undo state and notices stay right.
  */
 import { create } from "zustand";
-import { engine } from "../engine/client";
+import { clearDraft, engine, restoreDraft } from "../engine/client";
 import { OCR_SCALE, recognizePage } from "../ocr";
+import { openProblem, plain, refusal } from "../ui/shell/errors";
+import { DRAFT, NOTICE } from "../ui/shell/strings";
 import type {
-  DocInfo, FindMatch, LineEdit, MutationResult, NewPageObject, OcrProgress, OpenResult, PageObject, Point, Rect, RGB, TextStyle,
+  DocInfo, ExportOptions, FindMatch, LineEdit, MutationResult, NewPageObject, OcrProgress, OpenResult, PageObject, Point, Rect, RGB, TextStyle,
 } from "../engine/types";
 
 export type ToolId =
@@ -33,6 +35,17 @@ export interface Toast {
   kind: "info" | "success" | "warning" | "error";
   message: string;
   action?: { label: string; run: () => void };
+  /** stays until it is dismissed (warnings about the document itself) */
+  sticky?: boolean;
+}
+
+/** a finished copy of the document, waiting to be saved or shared */
+export interface Prepared {
+  bytes: Uint8Array;
+  name: string;
+  options: ExportOptions;
+  /** which state of which document it was made from */
+  stamp: string;
 }
 
 /** something waiting for the user to tap a spot on a page (image or signature) */
@@ -65,6 +78,10 @@ export interface AppState {
   search: { query: string; matches: FindMatch[]; active: number };
   ocr: { running: boolean; progress: OcrProgress | null; done: number[]; languages: string[] };
   theme: "system" | "light" | "dark";
+  /** why the last file did not open, shown on the start screen until the next attempt */
+  openError: string | null;
+  /** a short sentence for screen readers about the change that just happened */
+  announcement: { text: string; nonce: number };
 
   openFiles(files: File[]): Promise<void>;
   /** a picture being edited in the image editor (separate from the PDF document) */
@@ -93,7 +110,13 @@ export interface AppState {
   setOcrLanguages(languages: string[]): void;
 
   /** export and save to the user's device */
-  download(options?: import("../engine/types").ExportOptions): Promise<void>;
+  download(options?: ExportOptions): Promise<void>;
+  /** export without saving: for the finish sheet, where sharing needs a fresh tap */
+  prepare(options?: ExportOptions, label?: string): Promise<Prepared | null>;
+  /** the copy has left the app (saved or shared): the changes in it are safe */
+  markSaved(copy: Prepared): void;
+  /** reopen the unsaved work kept on this device */
+  resumeDraft(): Promise<void>;
 
   setTool(tool: ToolId): void;
   setToolOptions(patch: Partial<ToolOptions>): void;
@@ -107,7 +130,7 @@ export interface AppState {
   scrollTo(page: number, rect?: Rect): void;
   setSearch(search: Partial<AppState["search"]>): void;
   setTheme(theme: AppState["theme"]): void;
-  toast(message: string, kind?: Toast["kind"], action?: Toast["action"]): void;
+  toast(message: string, kind?: Toast["kind"], action?: Toast["action"], options?: { sticky?: boolean }): void;
   dismissToast(id: number): void;
 }
 
@@ -139,7 +162,26 @@ let waitingFiles: { before: File[]; after: File[] } | null = null;
 const staleOcrPages = new Set<number>();
 let ocrUsed = false;
 let checkingOcr = false;
-const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
+const errorText = (e: unknown) => plain(e instanceof Error ? e.message : String(e));
+/** substitute fonts already announced for the open document, so one notice per font is enough */
+const toldFonts = new Set<string>();
+/** names PDF producers give to the document's own fonts; they are not substitutes */
+const OWN_FONT = /^[A-Z]{6}\+|(MT|PSMT)$|MT[,-]/;
+/** what screen readers hear once a change has been made */
+const SPOKEN: Record<string, string> = {
+  "Updating text": NOTICE.updated,
+  Undoing: NOTICE.undone,
+  Redoing: NOTICE.redone,
+};
+
+const stampOf = (s: { session: number; doc: DocInfo | null }) =>
+  `${s.session}:${s.doc?.pages.map((p) => p.revision).join(",") ?? ""}`;
+
+/** "report (edited).pdf" stays that, however often it is opened and saved again */
+export function editedName(fileName: string): string {
+  const base = fileName.replace(/\.pdf$/i, "").replace(/(\s*\(edited\))+$/i, "");
+  return `${base} (edited).pdf`;
+}
 const isPdf = (f: File) => f.type === "application/pdf" || /\.pdf$/i.test(f.name);
 const isImage = (f: File) => f.type.startsWith("image/") || /\.(png|jpe?g|gif|bmp|tiff?|webp)$/i.test(f.name);
 
@@ -180,6 +222,7 @@ export const useStore = create<AppState>()((set, get) => {
     passwordPrompt: null,
     scrollRequest: null,
     search: { query: "", matches: [], active: -1 },
+    openError: null,
   });
 
   const opened = (result: OpenResult, bytes: Uint8Array, fileName: string) => {
@@ -189,6 +232,7 @@ export const useStore = create<AppState>()((set, get) => {
     }
     // recognition of the previous document is over
     ocrAbort?.abort();
+    toldFonts.clear();
     ocrUsed = false;
     staleOcrPages.clear();
     set((s) => ({
@@ -196,18 +240,15 @@ export const useStore = create<AppState>()((set, get) => {
       image: null,
       doc: result.doc,
       session: s.session + 1,
+      // notices about the previous document are of no use now
+      toasts: [],
       ocr: { ...s.ocr, running: false, progress: null, done: [] },
     }));
-    if (result.doc.signed)
-      get().toast("This PDF is digitally signed. Any change will invalidate the signature.", "warning");
-    if (result.doc.repaired) get().toast("This file was damaged and has been repaired.", "info");
-    if (result.doc.restricted)
-      get().toast(
-        "The author of this PDF restricted editing. The downloaded copy will not carry that restriction, so only edit it if you are allowed to.",
-        "warning",
-      );
-    if (result.doc.xfa)
-      get().toast("This PDF uses an XFA form. Some fields only appear in Adobe's software.", "warning");
+    const sticky = { sticky: true };
+    if (result.doc.signed) get().toast(NOTICE.signed, "warning", undefined, sticky);
+    if (result.doc.repaired) get().toast(NOTICE.repaired, "info");
+    if (result.doc.restricted) get().toast(NOTICE.restricted, "warning", undefined, sticky);
+    if (result.doc.xfa) get().toast(NOTICE.xfa, "warning", undefined, sticky);
   };
 
   /** take over an engine result: document state, undo state and notices */
@@ -223,13 +264,12 @@ export const useStore = create<AppState>()((set, get) => {
       toasts: s.toasts.filter((t) => t.action?.label !== "Undo"),
     }));
     for (const w of result.warnings) get().toast(w, "warning");
-    const fonts = result.fallbackFonts;
-    if (fonts.length)
-      get().toast(
-        `The original font could not draw some characters, so ${fonts.join(", ")} ${fonts.length > 1 ? "were" : "was"} used.`,
-        "info",
-        { label: "Upload font", run: () => get().openPanel("fonts") },
-      );
+    const substitutes = result.fallbackFonts.filter((f) => !OWN_FONT.test(f));
+    const fonts = (substitutes.length ? substitutes : result.fallbackFonts).filter((f) => !toldFonts.has(f));
+    if (fonts.length) {
+      for (const f of fonts) toldFonts.add(f);
+      get().toast(NOTICE.fallback(fonts), "info", { label: NOTICE.uploadFont, run: () => get().openPanel("fonts") });
+    }
   };
 
   const refreshOcrDone = async (changed: number[]) => {
@@ -278,6 +318,7 @@ export const useStore = create<AppState>()((set, get) => {
   /** add the other files chosen with the opened PDF, keeping the order they were picked in */
   const addFiles = async ({ before, after }: { before: File[]; after: File[] }) => {
     let front = 0;
+    let joined = 0;
     for (const [i, file] of [...before, ...after].entries()) {
       const count = get().doc!.pageCount;
       const at = i < before.length ? front : count;
@@ -286,12 +327,14 @@ export const useStore = create<AppState>()((set, get) => {
         if (isPdf(file)) get().applyMutation(await engine.insertPdf(new Uint8Array(await file.arrayBuffer()), at));
         else get().applyMutation(await engine.insertImagesAsPages([await toEngineImage(file)], at));
         if (i < before.length) front += get().doc!.pageCount - count;
+        joined++;
       } catch (e) {
         get().toast(`${file.name} was not added: ${errorText(e)}`, "error");
       } finally {
         set({ busy: null });
       }
     }
+    if (joined) get().toast(NOTICE.joined(joined + 1), "success");
   };
 
   /** run an open; true when it replaced the current document */
@@ -313,6 +356,7 @@ export const useStore = create<AppState>()((set, get) => {
       text: { family: "Noto Sans", bold: false, italic: false, serif: false, mono: false, size: 14, color: [0.07, 0.07, 0.09] },
     },
     toasts: [],
+    announcement: { text: "", nonce: 0 },
     image: null,
     openImage: (file) => set({ image: file }),
     closeImage: () => set({ image: null }),
@@ -340,7 +384,8 @@ export const useStore = create<AppState>()((set, get) => {
         }
       } catch (e) {
         set({ busy: null });
-        get().toast(errorText(e), "error");
+        if (get().doc) get().toast(errorText(e), "error");
+        else set({ openError: errorText(e) });
       }
     },
     ocr: { running: false, progress: null, done: [], languages: readStored<string[]>(LANG_KEY, []) },
@@ -348,6 +393,13 @@ export const useStore = create<AppState>()((set, get) => {
 
     async openFiles(files) {
       if (!files.length) return;
+      set({ openError: null });
+      const turnedAway = files.map(refusal).find((reason) => reason !== null);
+      if (turnedAway) {
+        if (get().doc) get().toast(turnedAway, "error");
+        else set({ openError: turnedAway });
+        return;
+      }
       const pdf = files.find(isPdf);
       try {
         if (pdf) {
@@ -377,12 +429,16 @@ export const useStore = create<AppState>()((set, get) => {
     },
 
     async openBytes(bytes, fileName, password) {
-      set({ busy: "Opening " + fileName });
+      set({ busy: "Opening " + fileName, openError: null });
       try {
         const copy = bytes.slice();
         opened(await engine.open(copy, fileName, password), bytes, fileName);
       } catch (e) {
-        get().toast(errorText(e), "error");
+        console.warn("open failed", e);
+        const message = openProblem(fileName, e instanceof Error ? e.message : String(e));
+        // with a document open the message goes over it; otherwise it stays on the start screen
+        if (get().doc) get().toast(message, "error");
+        else set({ openError: message });
       } finally {
         set({ busy: null });
       }
@@ -416,6 +472,7 @@ export const useStore = create<AppState>()((set, get) => {
       try {
         const result = await call();
         get().applyMutation(result);
+        set((s) => ({ announcement: { text: SPOKEN[label] ?? NOTICE.changed, nonce: s.announcement.nonce + 1 } }));
         return result;
       } catch (e) {
         get().toast(errorText(e), "error");
@@ -431,7 +488,12 @@ export const useStore = create<AppState>()((set, get) => {
       void refreshOcrDone(result.changedPages);
     },
 
-    editLine: (page, edit) => get().run("Updating text", () => engine.editLines(page, [edit])),
+    async editLine(page, edit) {
+      const result = await get().run("Updating text", () => engine.editLines(page, [edit]));
+      if (result && edit.text === "" && result.canUndo)
+        get().toast(NOTICE.lineDeleted, "success", { label: NOTICE.undo, run: () => void get().undo() });
+      return result;
+    },
     addObject: (object) => get().run("Adding", () => engine.addObject(object)),
     updateObject: (object) => get().run("Updating", () => engine.updateObject(object)),
 
@@ -464,6 +526,7 @@ export const useStore = create<AppState>()((set, get) => {
       const before = new Map(pages.map((p) => [p, get().doc?.pages[p]?.revision]));
       const unchanged = (p: number) => get().doc?.pages[p]?.revision === before.get(p);
       let skipped = 0;
+      let read = 0;
       set((s) => ({ ocr: { ...s.ocr, running: true, progress: null } }));
       try {
         for (const page of pages) {
@@ -489,7 +552,10 @@ export const useStore = create<AppState>()((set, get) => {
           apply(await engine.setOcrResult(result));
           ocrUsed = true;
           set((s) => ({ ocr: { ...s.ocr, done: [...new Set([...s.ocr.done, page])] } }));
+          read++;
         }
+        if (read && !skipped && !abort.signal.aborted && get().session === session)
+          get().toast(read === 1 ? NOTICE.recognised(pages[0]! + 1) : NOTICE.recognisedMany(read), "success");
         if (skipped && !abort.signal.aborted && get().session === session)
           get().toast(
             `${skipped === 1 ? "A page" : skipped + " pages"} changed while the text was being read and ${skipped === 1 ? "was" : "were"} skipped. Run recognition again.`,
@@ -513,16 +579,44 @@ export const useStore = create<AppState>()((set, get) => {
     },
 
     async download(options) {
+      const copy = await get().prepare(options);
+      if (!copy) return;
+      saveBytes(copy.bytes, copy.name);
+      get().markSaved(copy);
+    },
+    async prepare(options = {}, label = "Preparing your PDF") {
       const doc = get().doc;
-      if (!doc) return;
-      set({ busy: "Preparing your PDF" });
+      if (!doc) return null;
+      set({ busy: label });
       try {
         const bytes = await engine.exportPdf(options);
-        saveBytes(bytes, doc.fileName.replace(/\.pdf$/i, "") + " (edited).pdf");
-        // a copy of only some pages does not save the whole document
-        if (!options?.pages) set({ dirty: false });
+        return { bytes, name: editedName(doc.fileName), options, stamp: stampOf(get()) };
       } catch (e) {
         get().toast(errorText(e), "error");
+        return null;
+      } finally {
+        set({ busy: null });
+      }
+    },
+    markSaved(copy) {
+      // a copy of only some pages does not save the whole document, and neither does one that is already behind
+      if (copy.options.pages || copy.stamp !== stampOf(get())) return;
+      set({ dirty: false });
+      // nothing unsaved is left to recover
+      void clearDraft();
+    },
+    async resumeDraft() {
+      if (get().busy) return;
+      set({ busy: DRAFT.restoring, openError: null });
+      try {
+        const found = await restoreDraft();
+        if (!found) throw new Error("nothing to restore");
+        opened({ status: "ok", doc: found.doc }, new Uint8Array(), found.fileName);
+        set({ canUndo: found.canUndo, canRedo: found.canRedo, dirty: true });
+        if (found.failed) get().toast(DRAFT.partly(found.failed), "warning");
+      } catch (e) {
+        console.warn("draft", e);
+        set({ openError: DRAFT.failed });
       } finally {
         set({ busy: null });
       }
@@ -548,10 +642,16 @@ export const useStore = create<AppState>()((set, get) => {
       writeStored(THEME_KEY, theme);
       set({ theme });
     },
-    toast(message, kind = "info", action) {
+    toast(message, kind = "info", action, options) {
       const id = toastId++;
-      set((s) => ({ toasts: [...s.toasts.filter((t) => t.message !== message).slice(-3), { id, kind, message, action }] }));
-      setTimeout(() => get().dismissToast(id), kind === "error" ? 9000 : 6000);
+      set((s) => {
+        const others = s.toasts.filter((t) => t.message !== message);
+        // room for four passing notes; the ones that must be read are never pushed out
+        let surplus = others.filter((t) => !t.sticky).length - 3;
+        const kept = others.filter((t) => t.sticky || surplus-- <= 0);
+        // the notice's own component times it, so the time stops while it is being read or is out of sight
+        return { toasts: [...kept, { id, kind, message, action, sticky: options?.sticky }] };
+      });
     },
     dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
   };

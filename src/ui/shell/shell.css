@@ -17,7 +17,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font: 15px/1.5 var(--font);
+  font: 0.9375rem/1.5 var(--font);
   -webkit-font-smoothing: antialiased;
 }
 html[data-editor],
@@ -145,16 +145,20 @@ html[data-editor] body {
 a.sh-btn {
   color: var(--text);
 }
-.sh-btn:hover:not(:disabled) {
-  background: var(--surface-2);
+@media (hover: hover) {
+  .sh-btn:hover:not(:disabled) {
+    background: var(--surface-2);
+  }
 }
 .sh-btn-primary {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--accent-text);
 }
-.sh-btn-primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 88%, var(--text));
+@media (hover: hover) {
+  .sh-btn-primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+  }
 }
 .sh-btn-ghost {
   background: transparent;
@@ -172,6 +176,13 @@ a.sh-btn {
 .sh-iconbtn:disabled {
   opacity: 0.45;
 }
+/* a faded filled button still looks like something to press: drain it instead */
+.sh-btn-primary:disabled {
+  border-color: transparent;
+  background: var(--surface-3);
+  color: var(--muted);
+  opacity: 1;
+}
 .sh-block {
   display: flex;
   width: 100%;
@@ -188,18 +199,25 @@ a.sh-btn {
   border-radius: var(--radius-sm);
   background: transparent;
 }
-.sh-iconbtn:hover:not(:disabled) {
-  background: var(--surface-2);
+@media (hover: hover) {
+  .sh-iconbtn:hover:not(:disabled) {
+    background: var(--surface-2);
+  }
 }
 .sh-iconbtn[aria-pressed="true"],
 .sh-iconbtn[aria-expanded="true"] {
   background: var(--accent-soft);
   color: var(--accent);
 }
-.sh-iconbtn-primary,
-.sh-iconbtn-primary:hover:not(:disabled) {
+.sh-iconbtn-primary {
   background: var(--accent);
   color: var(--accent-text);
+}
+@media (hover: hover) {
+  .sh-iconbtn-primary:hover:not(:disabled) {
+    background: var(--accent);
+    color: var(--accent-text);
+  }
 }
 
 .sh-link {
@@ -228,7 +246,7 @@ a.sh-btn {
   min-width: 0;
 }
 .sh-label {
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
 }
 .sh-input {
@@ -241,7 +259,7 @@ a.sh-btn {
   background: var(--surface);
   color: var(--text);
   /* below 16px iOS zooms the page on focus */
-  font-size: 16px;
+  font-size: max(16px, 1rem);
 }
 textarea.sh-input {
   padding-block: 10px;
@@ -271,7 +289,7 @@ select.sh-input {
 .sh-hint,
 .sh-status,
 .sh-error {
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: var(--muted);
 }
 .sh-error {
@@ -281,7 +299,7 @@ select.sh-input {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  font-size: 13px;
+  font-size: 0.8125rem;
   flex: none;
 }
 .sh-inline .sh-input {
@@ -314,7 +332,7 @@ select.sh-input {
 .sh-check small {
   display: block;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 
 .sh-segmented {
@@ -337,14 +355,14 @@ select.sh-input {
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--muted);
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
   white-space: nowrap;
 }
 .sh-segmented button[aria-pressed="true"] {
-  background: var(--surface);
+  background: var(--selected);
   color: var(--text);
-  box-shadow: 0 0 0 1px var(--border), 0 1px 3px rgb(0 0 0 / 0.08);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
 }
 @media (pointer: coarse) {
   .sh-segmented button {
@@ -451,6 +469,13 @@ select.sh-input {
 
 /* ---------- start screen ---------- */
 
+@font-face {
+  font-family: "PDFEdit Caslon";
+  src: url("/fonts/caslon-400.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
+
 .sh-start {
   display: flex;
   flex-direction: column;
@@ -465,7 +490,7 @@ select.sh-input {
   justify-content: space-between;
   gap: var(--space-3);
   width: 100%;
-  max-width: 880px;
+  max-width: 640px;
   min-height: 60px;
   margin: 0 auto;
 }
@@ -476,58 +501,122 @@ select.sh-input {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 17px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
 }
 .sh-start-main {
   display: flex;
   flex: 1;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  max-width: 880px;
-  margin: 0 auto;
-  padding: var(--space-5) 0;
-  text-align: center;
-}
-.sh-start-main h1 {
-  font-size: clamp(27px, 6.4vw, 42px);
-  line-height: 1.15;
-  letter-spacing: -0.025em;
-  text-wrap: balance;
-}
-.sh-start-main .sh-lead {
-  margin: var(--space-3) 0 var(--space-5);
-  color: var(--muted);
-  font-size: 16px;
-  text-wrap: balance;
-}
-.sh-dropzone {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
   gap: var(--space-4);
   width: 100%;
-  max-width: 520px;
-  padding: var(--space-6) var(--space-4) var(--space-5);
-  border: 1.5px dashed var(--control-border);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
+  max-width: 640px;
+  margin: 0 auto;
+  padding: var(--space-2) 0 var(--space-6);
+}
+
+/* a sheet of paper on the desk: white in both themes, with its own fixed ink */
+.sh-sheetcard {
+  --accent: var(--mark);
+  --accent-hover: #2242b8;
+  --accent-text: #ffffff;
+  --accent-soft: #e6ebfc;
+  --surface: #ffffff;
+  --surface-2: #f2f3f5;
+  --surface-3: #e6e9ee;
+  --text: var(--ink);
+  --muted: var(--ink-muted);
+  --border: #dcdfe5;
+  --control-border: #808693;
+  --success: #17693f;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: var(--space-6) var(--space-5) var(--space-5);
+  border-radius: var(--radius-xs);
+  background: var(--paper);
+  box-shadow: var(--elev-1), 0 18px 40px -24px rgb(16 20 30 / 0.35);
+  color: var(--text);
+  color-scheme: light;
   cursor: pointer;
 }
-.sh-dropzone:hover {
-  border-color: var(--accent);
+body:has(.sh-drop) .sh-sheetcard {
+  outline: 2px solid var(--mark);
+  outline-offset: 4px;
 }
-.sh-dropzone > svg {
-  color: var(--accent);
+
+/* the headline sits in a text box that is being edited: the one thing the app does */
+.sh-textbox {
+  position: relative;
+  align-self: stretch;
+  margin: 0 -10px;
+  padding: 6px 10px 8px;
 }
-.sh-dropzone .sh-btn {
-  width: 100%;
-  max-width: 280px;
-  min-height: 52px;
-  font-size: 16px;
+.sh-textbox::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1.5px solid var(--mark);
+  background: rgb(43 79 216 / 0.04);
+  animation: sh-fade 0.4s 0.3s var(--ease-out) backwards;
+  pointer-events: none;
+}
+/* the two grips of a selected box */
+.sh-textbox::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  --grip: linear-gradient(var(--mark), var(--mark));
+  background:
+    var(--grip) left top / 7px 7px no-repeat,
+    var(--grip) right top / 7px 7px no-repeat,
+    var(--grip) left bottom / 7px 7px no-repeat,
+    var(--grip) right bottom / 7px 7px no-repeat;
+  animation: sh-fade 0.4s 0.3s var(--ease-out) backwards;
+  pointer-events: none;
+}
+.sh-start-main h1 {
+  position: relative;
+  font-family: var(--font-display);
+  font-size: clamp(1.875rem, 8vw, 2.875rem);
+  font-weight: 400;
+  line-height: 1.14;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+.sh-start-main h1::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 0.95em;
+  margin-left: 3px;
+  background: var(--mark);
+  vertical-align: -0.12em;
+  animation: sh-caret 1.06s steps(1) 4;
+}
+.sh-start-main .sh-lead {
+  margin: var(--space-4) 0 var(--space-5);
+  color: var(--muted);
+  font-size: var(--text-lg);
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+.sh-start-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-self: stretch;
+  gap: var(--space-2);
+}
+.sh-start-actions .sh-btn {
+  flex: 1 1 200px;
+  max-width: 260px;
+  min-height: var(--ctl-lg);
+  font-size: 1rem;
+}
+.sh-start-main .sh-accepts {
+  margin-top: var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-sm);
 }
 @media (hover: none) {
   .sh-fine-only {
@@ -539,63 +628,226 @@ select.sh-input {
   align-items: flex-start;
   gap: var(--space-2);
   margin-top: var(--space-4);
-  font-size: 14px;
-  text-align: left;
+  font-size: var(--text-md);
 }
 .sh-privacy svg {
   flex: none;
+  margin-top: 1px;
   color: var(--success);
 }
-.sh-start-main .sh-points {
-  display: grid;
-  width: 100%;
-  max-width: 520px;
-  margin-top: var(--space-7);
-  text-align: left;
-}
-.sh-points li {
+.sh-boot {
   display: flex;
-  gap: var(--space-3);
-  padding: var(--space-4) 0;
+  flex-direction: column;
+  align-self: stretch;
+  gap: var(--space-1);
+  margin-top: var(--space-3) !important;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+.sh-start-main .sh-scripts {
+  display: flex;
+  flex-wrap: wrap;
+  align-self: stretch;
+  gap: var(--space-2) var(--space-5);
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
   border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: var(--text-md);
+  cursor: default;
 }
-.sh-points svg {
+
+.sh-openerror,
+.sh-offer,
+.sh-draft {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.sh-openerror {
+  border-color: var(--danger);
+}
+.sh-openerror > svg {
   flex: none;
-  margin-top: 2px;
+  color: var(--danger);
+}
+.sh-openerror > p,
+.sh-offer > p {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.sh-offer > svg {
+  flex: none;
   color: var(--muted);
 }
-.sh-points h2 {
-  font-size: 14px;
+.sh-draft {
+  border-color: var(--accent);
 }
-.sh-points p {
+.sh-draft > svg {
+  flex: none;
+  color: var(--accent);
+}
+.sh-draft-text {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.sh-draft-text h2 {
+  font-size: var(--text-md);
+}
+.sh-draft-text p {
   color: var(--muted);
-  font-size: 14px;
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
 }
-@media (min-width: 760px) {
-  .sh-start-main .sh-points {
-    grid-template-columns: repeat(3, 1fr);
-    gap: var(--space-5);
-    max-width: 880px;
-  }
-  .sh-points li {
-    flex-direction: column;
-    gap: var(--space-2);
-  }
+.sh-draft-text strong {
+  color: var(--text);
+}
+.sh-draft-actions {
+  display: flex;
+  gap: var(--space-1);
+  margin-left: auto;
+}
+
+.sh-about-start {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-6) var(--space-1) 0;
+}
+.sh-about-start h2 {
+  margin-top: var(--space-5);
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 400;
+}
+.sh-about-start h2:first-child {
+  margin-top: 0;
+}
+.sh-about-start h3,
+.sh-facts dt {
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+.sh-about-start p,
+.sh-facts dd {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-md);
+}
+/* three steps that really happen in this order */
+.sh-start-main .sh-steps {
+  display: grid;
+  gap: var(--space-3);
+  counter-reset: step;
+  list-style: none;
+}
+.sh-steps li {
+  position: relative;
+  padding-left: 40px;
+  counter-increment: step;
+}
+.sh-steps li::before {
+  content: counter(step);
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+}
+.sh-start-main .sh-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-4) var(--space-5);
+}
+.sh-faq details {
+  border-bottom: 1px solid var(--border);
+}
+.sh-faq summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: var(--ctl-lg);
+  font-weight: 600;
+  list-style: none;
+}
+.sh-faq summary::-webkit-details-marker {
+  display: none;
+}
+.sh-faq summary::after {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-right: var(--space-1);
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: translateY(-2px) rotate(45deg);
+}
+.sh-faq details[open] summary::after {
+  transform: translateY(2px) rotate(225deg);
+}
+.sh-faq details p {
+  padding-bottom: var(--space-4);
 }
 .sh-start-foot {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
+  align-items: center;
   gap: 0 var(--space-5);
-  padding: var(--space-2) 0 var(--space-3);
-  font-size: 13px;
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: var(--space-2) var(--space-1) var(--space-3);
+  border-top: 1px solid var(--border);
+  font-size: var(--text-sm);
 }
-.sh-start-foot a {
+.sh-start-foot a,
+.sh-start-foot .sh-link {
   display: inline-flex;
   align-items: center;
   min-height: var(--tap);
   color: var(--muted);
+  font-weight: 400;
+  text-decoration: underline;
   text-underline-offset: 3px;
+}
+@media (max-width: 599px) {
+  .sh-sheetcard {
+    padding: var(--space-5) var(--space-4) var(--space-4);
+  }
+  .sh-start-actions .sh-btn {
+    flex-basis: 100%;
+    max-width: none;
+  }
+}
+/* a phone held sideways: the buttons must be in view without scrolling */
+@media (max-height: 479px) {
+  .sh-start-head {
+    min-height: var(--tap);
+  }
+  .sh-sheetcard {
+    padding-block: var(--space-3);
+  }
+  .sh-start-main h1 {
+    font-size: 1.625rem;
+  }
+  .sh-start-main .sh-lead {
+    margin: var(--space-2) 0 var(--space-3);
+    font-size: var(--text-md);
+  }
 }
 
 /* ---------- editor frame ---------- */
@@ -668,7 +920,7 @@ h1.sh-filename {
   flex: 0 1 auto;
   max-width: 260px;
   margin-right: var(--space-2);
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 .sh-filename-text {
   overflow: hidden;
@@ -701,7 +953,7 @@ h1.sh-filename {
   align-items: center;
   gap: 6px;
   max-width: 100%;
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
 }
 .sh-filename-sub {
@@ -709,7 +961,7 @@ h1.sh-filename {
   align-items: center;
   gap: 3px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -720,11 +972,13 @@ h1.sh-filename {
   border: 0;
   border-radius: var(--radius-sm);
   background: none;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-variant-numeric: tabular-nums;
 }
-.sh-zoom-value:hover {
-  background: var(--surface-2);
+@media (hover: hover) {
+  .sh-zoom-value:hover {
+    background: var(--surface-2);
+  }
 }
 .sh-pagenav {
   margin-left: var(--space-2);
@@ -737,13 +991,13 @@ h1.sh-filename {
   min-height: 34px;
   padding: 0;
   text-align: center;
-  font-size: 14px;
+  font-size: 0.875rem;
   font-variant-numeric: tabular-nums;
 }
 .sh-page-count {
   padding: 0 var(--space-1) 0 6px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -756,13 +1010,21 @@ h1.sh-filename {
   min-height: 40px;
   border-radius: var(--radius-sm) 0 0 var(--radius-sm);
 }
-.sh-download .sh-download-more,
-.sh-download .sh-download-more:hover:not(:disabled) {
+.sh-download .sh-download-more {
   width: 36px;
   height: 40px;
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   background: var(--accent);
   color: var(--accent-text);
+}
+@media (hover: hover) {
+  .sh-download .sh-download-more:hover:not(:disabled) {
+    width: 36px;
+    height: 40px;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    background: var(--accent);
+    color: var(--accent-text);
+  }
 }
 @media (max-width: 1140px) {
   [data-layout="desktop"] .sh-top > .sh-btn-ghost {
@@ -830,16 +1092,17 @@ h1.sh-filename {
   border: 0;
   background: none;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 600;
   white-space: nowrap;
 }
 .sh-bottom button span {
   display: grid;
   place-items: center;
-  width: 52px;
-  height: 30px;
-  border-radius: 15px;
+  width: 56px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  transition: background-color var(--dur-fast) var(--ease-out);
 }
 .sh-bottom button:focus-visible {
   outline-offset: -3px;
@@ -888,106 +1151,120 @@ html[data-keyboard] .sh-bottom {
 }
 .sh-options {
   bottom: var(--space-2);
-  min-width: min(360px, calc(100% - 16px));
-  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: var(--shadow);
+  background: var(--surface-raised);
+  box-shadow: var(--elev-2);
 }
-.sh-options-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-.sh-options-head p {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  /* the bar is as wide as its controls: the hint wraps inside that */
+.sh-options-hint {
+  /* the row sets the width of the bar; the hint wraps inside it */
   width: 0;
-  min-width: 0;
-  font-size: 13px;
+  min-width: 100%;
+  padding: 2px var(--space-1) 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
   line-height: 1.35;
 }
-.sh-options-head p span {
-  color: var(--muted);
+.sh-options-hint strong {
+  margin-right: var(--space-2);
+  color: var(--text);
+  font-weight: 600;
 }
 .sh-options-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-3);
-  padding: 3px 3px 3px 0;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scrollbar-width: thin;
+  justify-content: center;
+  gap: 0 var(--space-1);
 }
-.sh-options-row > * {
+.sh-options-done {
+  margin-left: auto;
+  color: var(--accent);
+}
+.sh-options-tray {
+  display: flex;
+  justify-content: center;
+  padding-bottom: var(--space-1);
+  border-bottom: 1px solid var(--border);
+}
+.sh-options-tray .sh-swatches {
+  justify-content: center;
+}
+.sh-options-tray .sh-field {
+  max-width: 100%;
+}
+.sh-options-tray .sh-segmented {
+  min-width: min(300px, calc(100vw - 48px));
+}
+.sh-optchip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: var(--tap);
+  height: var(--tap);
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-variant-numeric: tabular-nums;
+}
+.sh-optchip small {
+  font-size: var(--text-sm);
+}
+.sh-optchip[aria-expanded="true"] {
+  background: var(--accent-soft);
+}
+.sh-dot {
+  position: relative;
+  display: block;
   flex: none;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--control-border);
+  border-radius: 50%;
 }
-/* phones held upright: the controls wrap, so none is out of sight */
-@media (min-height: 480px) {
-  [data-layout="phone"] .sh-options {
-    width: auto;
-    margin-inline: var(--space-2);
-    max-width: 520px;
-  }
-  [data-layout="phone"] .sh-options-row {
-    flex-wrap: wrap;
-    row-gap: var(--space-1);
-    overflow-x: visible;
-  }
-  /* width and opacity share a row, fill takes the last one: the card stays low */
-  [data-layout="phone"] .sh-options-row > div.sh-inline {
-    order: 1;
-  }
-  /* the controls explain themselves: the hint would only push the card up the page */
-  [data-layout="phone"] .sh-options:has(.sh-options-row) .sh-options-head p span {
-    display: none;
-  }
+.sh-dot[data-none]::after {
+  content: "";
+  position: absolute;
+  top: 10px;
+  left: 0;
+  width: 22px;
+  height: 2px;
+  background: var(--danger);
+  transform: rotate(-45deg);
 }
 [data-layout="desktop"] .sh-options {
   max-width: min(660px, calc(100% - 16px));
 }
-[data-layout="desktop"] .sh-options-row {
-  flex-wrap: wrap;
-  overflow-x: visible;
+[data-layout="desktop"] .sh-options {
+  min-width: min(360px, calc(100% - 16px));
 }
-/* landscape phones: one row, so the card leaves the page visible */
-@media (max-height: 479px) {
-  .sh-options {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-width: 0;
-  }
-  .sh-options-head {
-    display: contents;
-  }
-  .sh-options-head p {
-    flex: 0 1 auto;
+@media (min-height: 480px) {
+  [data-layout="phone"] .sh-options {
     width: auto;
+    max-width: 520px;
+    margin-inline: auto;
+    right: var(--space-2);
+    left: var(--space-2);
   }
-  .sh-options-head p strong {
-    white-space: nowrap;
-  }
-  .sh-options:has(.sh-options-row) .sh-options-head p {
-    flex: none;
-  }
-  .sh-options:has(.sh-options-row) .sh-options-head p span {
+  [data-layout="phone"] .sh-options-hint strong {
     display: none;
   }
-  .sh-options-head > button {
-    flex: none;
-    order: 1;
+}
+/* landscape phones: one row, so the bar leaves the page visible */
+@media (max-height: 479px) {
+  .sh-options-hint {
+    display: none;
   }
   .sh-options-row {
-    flex: 0 1 auto;
-    min-width: 0;
-    /* one row that scrolls: the faded edge says there is more */
-    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
-    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
-    padding-right: 28px;
+    flex-wrap: nowrap;
+  }
+  .sh-options-done {
+    margin-left: var(--space-3);
   }
 }
 .sh-stepper {
@@ -995,9 +1272,9 @@ html[data-keyboard] .sh-bottom {
   align-items: center;
 }
 .sh-stepper output {
-  min-width: 48px;
+  min-width: 42px;
   text-align: center;
-  font-size: 14px;
+  font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
 .sh-width {
@@ -1020,9 +1297,9 @@ html[data-keyboard] .sh-bottom {
   padding: 2px var(--space-1) 2px var(--space-3);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: var(--shadow);
-  font-size: 14px;
+  background: var(--surface-raised);
+  box-shadow: var(--elev-2);
+  font-size: 0.875rem;
 }
 .sh-chip-main {
   display: flex;
@@ -1062,8 +1339,8 @@ html[data-keyboard] .sh-bottom {
   margin-bottom: var(--sh-kb, 0px);
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   background: var(--surface);
-  box-shadow: var(--shadow);
-  animation: sh-rise 0.18s ease-out;
+  box-shadow: var(--elev-3);
+  animation: sh-rise var(--dur-med) var(--ease-out);
 }
 .sh-sheet {
   display: flex;
@@ -1093,7 +1370,7 @@ html[data-keyboard] .sh-bottom {
   align-items: center;
   gap: var(--space-2);
   margin-bottom: var(--space-3) !important;
-  font-size: 18px;
+  font-size: 1.125rem;
 }
 .sh-actions {
   display: flex;
@@ -1131,7 +1408,7 @@ html[data-keyboard] .sh-bottom {
   border-bottom: 1px solid var(--border);
 }
 .sh-panel-head h2 {
-  font-size: 16px;
+  font-size: 1rem;
 }
 .sh-panel-head[data-swipe] {
   position: relative;
@@ -1163,7 +1440,7 @@ html[data-keyboard] .sh-bottom {
   overscroll-behavior: contain;
 }
 .sh-panel-body h3 {
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 .sh-panel-foot {
   display: flex;
@@ -1184,7 +1461,7 @@ html[data-keyboard] .sh-bottom {
   padding: var(--space-1) var(--space-2) var(--space-1) var(--space-4);
   border-bottom: 1px solid var(--border);
   color: var(--muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .sh-subhead .sh-btn {
   color: var(--accent);
@@ -1256,8 +1533,8 @@ html[data-keyboard] .sh-bottom {
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: var(--shadow);
+  background: var(--surface-raised);
+  box-shadow: var(--elev-2);
 }
 .sh-item {
   display: flex;
@@ -1270,8 +1547,10 @@ html[data-keyboard] .sh-bottom {
   background: none;
   text-align: left;
 }
-.sh-item:hover {
-  background: var(--surface-2);
+@media (hover: hover) {
+  .sh-item:hover {
+    background: var(--surface-2);
+  }
 }
 .sh-item:focus-visible {
   outline-offset: -2px;
@@ -1283,7 +1562,7 @@ html[data-keyboard] .sh-bottom {
 .sh-item small {
   margin-left: auto;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 .sh-more .sh-toolgrid {
   display: grid;
@@ -1304,7 +1583,7 @@ html[data-keyboard] .sh-bottom {
   border: 0;
   border-radius: var(--radius);
   background: var(--surface-2);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 .sh-toolgrid button[aria-pressed="true"] {
   background: var(--accent-soft);
@@ -1341,6 +1620,11 @@ body:has(.sh-findcard) .sh-toasts {
   top: auto;
   bottom: calc(var(--bottombar-h) + var(--safe-bottom) + 8px);
 }
+/* over the start screen and sheets there is no tool bar to clear */
+body:has(.sh-start) .sh-toasts {
+  top: auto;
+  bottom: calc(var(--safe-bottom) + 8px);
+}
 .sh-toast {
   display: flex;
   align-items: flex-start;
@@ -1348,9 +1632,9 @@ body:has(.sh-findcard) .sh-toasts {
   padding: 2px 2px 2px var(--space-3);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: var(--shadow);
-  font-size: 14px;
+  background: var(--surface-raised);
+  box-shadow: var(--elev-2);
+  font-size: 0.875rem;
   pointer-events: auto;
   animation: sh-fade 0.18s ease-out;
 }
@@ -1383,18 +1667,23 @@ body:has(.sh-findcard) .sh-toasts {
   overflow-wrap: anywhere;
 }
 
-/* phones: a note must never sit on the page for long, least of all on the line being typed */
+/* phones: one small note just above the tool bar, within thumb reach and away from the top of the page */
 @media (max-width: 699px), (pointer: coarse) {
   .sh-toast {
-    font-size: 13px;
+    font-size: var(--text-sm);
   }
-  /* one at a time: the newest */
-  .sh-toasts li:not(:last-child):not(.sh-toast-error) {
-    display: none;
+  body:has(.sh-bottom) .sh-toasts {
+    top: auto;
+    bottom: calc(var(--bottombar-h) + var(--safe-bottom) + 8px);
   }
-  /* while typing it keeps to the height of the top bar, in one line */
+  /* above the card of the active tool */
+  body:has(.sh-options) .sh-toasts {
+    bottom: calc(var(--bottombar-h) + var(--safe-bottom) + 132px);
+  }
+  /* while typing only errors appear, over the top bar and no taller than it */
   body:has(.sh-app[data-editing]) .sh-toasts {
     top: calc(var(--safe-top) + 4px);
+    bottom: auto;
   }
   body:has(.sh-app[data-editing]) .sh-toast-body p {
     display: -webkit-box;
@@ -1441,7 +1730,7 @@ body:has(.sh-findcard) .sh-toasts {
 .sh-busy[data-quiet] .sh-busy-card {
   padding: var(--space-2) var(--space-4);
   border: 1px solid var(--border);
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .sh-busy[data-quiet] .sh-spinner {
   width: 16px;
@@ -1454,8 +1743,8 @@ body:has(.sh-findcard) .sh-toasts {
   max-width: 100%;
   padding: var(--space-4) var(--space-5);
   border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: var(--shadow);
+  background: var(--surface-raised);
+  box-shadow: var(--elev-2);
   font-weight: 600;
   animation: sh-fade 0.18s ease-out;
 }
@@ -1478,7 +1767,7 @@ body:has(.sh-findcard) .sh-toasts {
   border: 2px dashed var(--accent);
   border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--accent-soft) 92%, transparent);
-  font-size: 17px;
+  font-size: 1.0625rem;
   font-weight: 600;
   pointer-events: none;
 }
@@ -1560,7 +1849,7 @@ body:has(.sh-findcard) .sh-toasts {
   box-shadow: 0 0 0 1px var(--border), 0 1px 4px rgb(0 0 0 / 0.1);
 }
 .sh-thumb-number {
-  font-size: 12px;
+  font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
 }
 .sh-thumb[aria-current="page"] .sh-thumb-number {
@@ -1597,7 +1886,7 @@ body:has(.sh-findcard) .sh-toasts {
   border-radius: var(--radius-sm);
   background: var(--accent);
   color: var(--accent-text);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   pointer-events: none;
 }
@@ -1621,11 +1910,13 @@ body:has(.sh-findcard) .sh-toasts {
   border: 0;
   border-radius: var(--radius-sm);
   background: none;
-  font-size: 12px;
+  font-size: 0.75rem;
   white-space: nowrap;
 }
-.sh-action:hover:not(:disabled) {
-  background: var(--surface-2);
+@media (hover: hover) {
+  .sh-action:hover:not(:disabled) {
+    background: var(--surface-2);
+  }
 }
 .sh-action:disabled {
   opacity: 0.4;
@@ -1668,8 +1959,10 @@ body:has(.sh-findcard) .sh-toasts {
   align-self: stretch;
   text-align: start;
 }
-.sh-results button:hover {
-  background: var(--surface-2);
+@media (hover: hover) {
+  .sh-results button:hover {
+    background: var(--surface-2);
+  }
 }
 .sh-results button[aria-current] {
   background: var(--accent-soft);
@@ -1679,7 +1972,7 @@ body:has(.sh-findcard) .sh-toasts {
 }
 .sh-results small {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 .sh-results mark {
   border-radius: 3px;
@@ -1694,7 +1987,7 @@ body:has(.sh-findcard) .sh-toasts {
   min-height: var(--tap);
   border-top: 1px solid var(--border);
   color: var(--accent);
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
 }
 
@@ -1709,7 +2002,7 @@ body:has(.sh-findcard) .sh-toasts {
   padding: var(--space-3);
   border-radius: var(--radius);
   background: var(--surface-2);
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 .sh-notice svg {
   flex: none;
@@ -1747,7 +2040,7 @@ body:has(.sh-findcard) .sh-toasts {
   left: 24px;
   border-top: 1px solid #c9c9cf;
   color: #63636b;
-  font-size: 13px;
+  font-size: 0.8125rem;
   text-align: center;
   pointer-events: none;
 }
@@ -1771,7 +2064,7 @@ body:has(.sh-findcard) .sh-toasts {
   border: 2px solid var(--border);
   border-radius: var(--radius);
   background: #fff;
-  font-size: 30px;
+  font-size: 1.875rem;
   line-height: 1.5;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1895,7 +2188,7 @@ body:has(.sh-findcard) .sh-toasts {
 }
 .sh-fonts small {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 0.75rem;
   text-align: right;
 }
 .sh-prose h3 {
@@ -1940,8 +2233,299 @@ body:has(.sh-findcard) .sh-toasts {
   }
 }
 
+/* ---------- finish sheet ---------- */
+
+.sh-dialog.sh-finish {
+  max-width: 480px;
+}
+.sh-ok {
+  color: var(--success);
+}
+.sh-filefield {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+.sh-filefield .sh-field {
+  flex: 1;
+}
+.sh-filefield > span {
+  display: flex;
+  align-items: center;
+  height: var(--tap);
+  color: var(--muted);
+}
+.sh-finish .sh-hint {
+  margin-top: calc(-1 * var(--space-2));
+  font-variant-numeric: tabular-nums;
+}
+.sh-finish-main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.sh-finish-main .sh-btn {
+  flex: 1 1 160px;
+  min-height: var(--ctl-lg);
+}
+.sh-finish-size {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+/* six choices: two rows of three keep every one a comfortable target */
+.sh-finish-size .sh-segmented {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.sh-finish-size .sh-segmented button {
+  min-height: var(--tap);
+}
+.sh-result {
+  display: flex;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+.sh-finish .sh-result .sh-hint {
+  margin: 0;
+}
+.sh-result svg {
+  flex: none;
+  margin-top: 1px;
+  color: var(--success);
+}
+.sh-result-missed svg {
+  color: var(--warning);
+}
+.sh-finish-more {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-1);
+}
+.sh-finish-more .sh-btn {
+  padding-inline: var(--space-2);
+  color: var(--accent);
+}
+
+/* ---------- page thumbnails beside the page ---------- */
+
+.sh-sidebar {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  width: var(--sidebar-w);
+  min-height: 0;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+}
+.sh-sidebar ol {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+.sh-sidebar li {
+  position: relative;
+  padding-block: 3px;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 176px;
+}
+.sh-sidebar li[data-drop] {
+  content-visibility: visible;
+}
+.sh-sidebar li[data-drop]::after {
+  content: "";
+  position: absolute;
+  top: -2px;
+  right: 0;
+  left: 0;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+.sh-sidebar li[data-drop="after"]::after {
+  top: auto;
+  bottom: -2px;
+}
+.sh-sidebar .sh-thumb {
+  background: transparent;
+}
+.sh-sidebar .sh-thumb-frame {
+  aspect-ratio: auto;
+  height: 140px;
+}
+.sh-sidebar .sh-thumb[aria-current="page"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.sh-sidebar .sh-thumb[data-picked] {
+  border-color: var(--accent);
+  border-style: dashed;
+  background: var(--accent-soft);
+}
+.sh-sidebar-foot {
+  margin: 0;
+  padding: 0 var(--space-3) var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+.sh-sidebar-foot:empty {
+  display: none;
+}
+
+/* ---------- top bar notes ---------- */
+
+.sh-badge {
+  flex: none;
+  padding: 1px var(--space-2);
+  border: 1px solid var(--warning);
+  border-radius: var(--radius-full);
+  color: var(--warning);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+/* ---------- more sheet ---------- */
+
+.sh-group-tools h3,
+.sh-more-head {
+  margin: 0;
+  padding: var(--space-3) var(--space-4) var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.sh-zoomrow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+}
+
+/* ---------- keyboard shortcuts ---------- */
+
+.sh-dialog.sh-keysdialog {
+  max-width: 680px;
+}
+.sh-keycolumns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-4) var(--space-6);
+}
+.sh-keycolumns h3 {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-md);
+}
+.sh-keycolumns section[data-off] dl {
+  color: var(--muted);
+}
+.sh-keys {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+.sh-keys dd {
+  margin: 0;
+  text-align: right;
+}
+
+.sh-busy-card small {
+  display: block;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: 400;
+}
+.sh-busy-card .sh-progress {
+  min-width: 220px;
+  margin-top: var(--space-1);
+}
+.sh-toast-more {
+  flex-basis: 100%;
+  padding-bottom: var(--space-1);
+  color: var(--muted);
+}
+/* the action sits beside a short message and drops below a long one, so notes stay low */
+.sh-toast-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--space-4);
+}
+.sh-toast-body p {
+  flex: 1 1 auto;
+  max-width: 100%;
+}
+.sh-toast-body .sh-link {
+  margin-top: 0;
+}
+/* clear of the thumbnails beside the page */
+@media (min-width: 900px) and (min-height: 480px) {
+  body:has(.sh-sidebar) .sh-toasts {
+    left: calc(var(--rail-w) + var(--sidebar-w) + var(--space-4));
+  }
+}
+.sh-toast[hidden] {
+  display: none;
+}
+
+/* ---------- touch: a tap must be seen to land ---------- */
+
+:where(.sh-btn, .sh-iconbtn, .sh-item, .sh-action, .sh-toolgrid button, .sh-segmented button, .sh-optchip, .sh-thumb, .sh-results button, .sh-zoom-value):active:not(:disabled) {
+  background-color: var(--surface-3);
+}
+:where(.sh-btn, .sh-iconbtn, .sh-toolgrid button, .sh-swatch):active:not(:disabled) {
+  transform: scale(0.97);
+}
+.sh-btn-primary:active:not(:disabled),
+.sh-iconbtn-primary:active:not(:disabled),
+.sh-download .sh-download-more:active:not(:disabled) {
+  background: var(--accent-hover);
+}
+.sh-bottom button:active span {
+  background: var(--surface-3);
+}
+
+/* ---------- contrast preferences ---------- */
+
+@media (prefers-contrast: more) {
+  :root {
+    --border: var(--control-border);
+  }
+}
+@media (forced-colors: active) {
+  .sh-swatch span,
+  .sh-dot,
+  .sh-signsample,
+  .sh-saved li > button:first-child,
+  .sh-sheetcard {
+    forced-color-adjust: none;
+  }
+  .sh-width,
+  .sh-position span,
+  .sh-progress span {
+    background: CanvasText;
+  }
+  .sh-app [aria-pressed="true"],
+  .sh-modal [aria-pressed="true"],
+  .sh-app [aria-current="page"],
+  .sh-app [aria-expanded="true"] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+}
+
 /* ---------- motion ---------- */
 
+@keyframes sh-caret {
+  50% {
+    opacity: 0;
+  }
+}
 @keyframes sh-spin {
   to {
     transform: rotate(1turn);
@@ -1963,8 +2547,14 @@ body:has(.sh-findcard) .sh-toasts {
   .sh-dialog,
   .sh-toast,
   .sh-busy-card,
+  .sh-textbox::before,
+  .sh-textbox::after,
+  .sh-start-main h1::after,
   .sh-spinner {
     animation: none;
+  }
+  .sh-start-main h1::after {
+    display: none;
   }
   .sh-sheet,
   .sh-progress span {

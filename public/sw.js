@@ -3,9 +3,12 @@
  *  - Pages: network first, so a deploy is picked up immediately; the saved copy is used only offline.
  *  - /assets/* (hashed file names) and version-pinned CDN files: cache first, they never change.
  *  - Other files of this site: saved copy first, refreshed in the background.
+ *  - A file shared to the installed app is set aside on this device for the app to read; it is never sent on.
  */
 const SHELL = "pdfedit-shell-v1";
 const CDN = "pdfedit-cdn-v1";
+/** files shared to the app, until it has read them (src/ui/shell/incoming.ts) */
+const INBOX = "pdfedit-inbox";
 const STATIC = [
   "/icon.svg",
   "/theme.js",
@@ -13,6 +16,8 @@ const STATIC = [
   "/icons/icon-192.png",
   "/icons/icon-512.png",
   "/icons/apple-touch-icon.png",
+  "/sample.pdf",
+  "/fonts/caslon-400.ttf",
 ];
 
 self.addEventListener("install", (event) => {
@@ -30,7 +35,7 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(
     (async () => {
       for (const name of await caches.keys())
-        if (name.startsWith("pdfedit-") && name !== SHELL && name !== CDN) await caches.delete(name);
+        if (name.startsWith("pdfedit-") && ![SHELL, CDN, INBOX].includes(name)) await caches.delete(name);
       await self.clients.claim();
     })(),
   );
@@ -104,10 +109,40 @@ function isUsable(response) {
   return response.ok && !(response.headers.get("content-type") || "").includes("text/html");
 }
 
+/**
+ * The share sheet posts files to /share-target. They are answered here, on the device: kept in a cache the
+ * app empties as it opens, so nothing of them reaches the network.
+ */
+async function receiveShare(request) {
+  try {
+    const form = await request.formData();
+    const files = form.getAll("files").filter((f) => typeof f === "object" && f.size > 0);
+    await caches.delete(INBOX);
+    const cache = await caches.open(INBOX);
+    for (const [i, file] of files.entries())
+      await cache.put(
+        "/__share/" + i,
+        new Response(file, {
+          headers: {
+            "content-type": file.type || "application/octet-stream",
+            "x-file-name": encodeURIComponent(file.name || "shared.pdf"),
+          },
+        }),
+      );
+  } catch (error) {
+    console.error("share", error);
+  }
+  return Response.redirect("/?shared=1", 303);
+}
+
 self.addEventListener("fetch", (event) => {
   const { request } = event;
-  if (request.method !== "GET" || request.headers.has("range")) return;
   const url = new URL(request.url);
+  if (request.method === "POST" && url.origin === self.location.origin && url.pathname === "/share-target") {
+    event.respondWith(receiveShare(request));
+    return;
+  }
+  if (request.method !== "GET" || request.headers.has("range")) return;
 
   if (url.origin === "https://cdn.jsdelivr.net") {
     // only files pinned to an exact version are safe to keep for good
@@ -129,7 +164,8 @@ async function page(event, request) {
   const cache = await caches.open(SHELL);
   try {
     const response = await fetch(request);
-    if (response.ok && new URL(request.url).pathname === "/") {
+    const url = new URL(request.url);
+    if (response.ok && url.pathname === "/" && !url.search) {
       const fresh = response.clone();
       event.waitUntil(
         (async () => {

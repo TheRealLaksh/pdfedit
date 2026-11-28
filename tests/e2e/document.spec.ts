@@ -1,7 +1,7 @@
 /** Passwords, export options, find and replace, and forms. */
 import {
-  ASSETS, chooseFiles, download, expect, fixture, fixturePath, idle, isPhone, open, openPanel, readPdf, saved, start, state,
-  test,
+  ASSETS, chooseFiles, download, expect, fixture, fixturePath, idle, isPhone, open, openPanel, readPdf, saved, saveFrom, start,
+  state, test,
 } from "./helpers";
 
 test.describe("passwords", () => {
@@ -40,7 +40,7 @@ test.describe("passwords", () => {
     const button = panel.getByRole("button", { name: "Download PDF" });
     await expect(button).toBeDisabled();
     await panel.getByLabel("New password").fill("open sesame 42");
-    const { bytes } = await saved(page, () => button.click());
+    const { bytes } = await saveFrom(page, button);
     const pdf = readPdf(bytes, "open sesame 42");
     expect(pdf.locked).toBe(true);
     expect(pdf.text(0)).toContain("river survey");
@@ -53,7 +53,7 @@ test.describe("export", () => {
     const panel = await openPanel(page, "Download");
     await panel.getByRole("button", { name: "Range" }).click();
     await panel.getByLabel("Page range").fill("2-3");
-    const { bytes } = await saved(page, () => panel.getByRole("button", { name: "Download PDF" }).click());
+    const { bytes } = await saveFrom(page, panel.getByRole("button", { name: "Download PDF" }));
     const pdf = readPdf(bytes);
     expect(pdf.pages).toBe(2);
     expect(pdf.text(0)).toContain("bravo");

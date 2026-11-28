@@ -47,7 +47,6 @@ export function FindPanel() {
     scrollTo(match.page, match.quads[0] ? quadToRect(match.quads[0]) : undefined);
   };
 
-  useEffect(() => input.current?.focus({ preventScroll: true }), []);
   // leaving the panel removes the highlights
   useEffect(() => () => useStore.getState().setSearch({ matches: [], active: -1 }), []);
 
@@ -132,6 +131,7 @@ export function FindPanel() {
         <form className="sh-input-group" onSubmit={submit} role="search">
           <input
             ref={input}
+            data-autofocus
             className="sh-input"
             type="search"
             name="find"

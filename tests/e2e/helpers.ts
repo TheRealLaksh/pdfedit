@@ -333,7 +333,24 @@ export async function download(page: Page) {
   const button = isPhone(page)
     ? page.getByRole("button", { name: "Download PDF", exact: true })
     : page.getByRole("banner").getByRole("button", { name: "Download", exact: true });
-  return saved(page, () => button.click());
+  return saveFrom(page, button);
+}
+
+/** the sheet a phone finishes in: name, share, save */
+export const finishSheet = (page: Page) => page.getByRole("dialog", { name: /^(Your PDF is ready|Saved)$/ });
+
+/** press a download button; on a phone also tap Save in the sheet that follows and put the sheet away */
+export async function saveFrom(page: Page, button: Locator) {
+  const phone = isPhone(page);
+  const result = await saved(page, async () => {
+    await button.click();
+    if (phone) await finishSheet(page).getByTestId("finish-save").click();
+  });
+  if (phone) {
+    await finishSheet(page).getByRole("button", { name: "Keep editing" }).click();
+    await expect(finishSheet(page)).toBeHidden();
+  }
+  return result;
 }
 
 /* ---------- reading the results ---------- */

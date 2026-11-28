@@ -53,3 +53,30 @@ export const hexToRgb = (hex: string): RGB => {
 export const sameColor = (a: RGB, b: RGB): boolean => a.every((v, i) => Math.abs(v - b[i]!) < 0.01);
 
 export const errorText = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+
+/** bytes as people read them; rounded up, so a size shown as within a limit really is */
+export function formatSize(bytes: number): string {
+  if (bytes < 1000 * 1024) return `${Math.max(1, Math.ceil(bytes / 1024))} KB`;
+  return `${(Math.ceil((bytes / 1024 / 1024) * 10) / 10).toFixed(1)} MB`;
+}
+
+/** what the user typed as a safe PDF file name; `fallback` when nothing usable is left */
+export function cleanFileName(typed: string, fallback: string): string {
+  const base = typed
+    .replace(/\.pdf$/i, "")
+    .replace(/[\\/:*?"<>|\u0000-\u001f\u007f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/^[. ]+|[. ]+$/g, "")
+    .slice(0, 180);
+  return base ? `${base}.pdf` : fallback;
+}
+
+/** "5 minutes ago" */
+export function ago(time: number, now = Date.now()): string {
+  const minutes = Math.round((time - now) / 60_000);
+  const say = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+  if (minutes > -1) return "just now";
+  if (minutes > -60) return say.format(minutes, "minute");
+  if (minutes > -60 * 24) return say.format(Math.round(minutes / 60), "hour");
+  return say.format(Math.round(minutes / 1440), "day");
+}

@@ -18,7 +18,8 @@ const guard = () => {
 /** is there anything Back must not throw away right now? */
 function needed(phone: boolean, handheld: boolean): boolean {
   const { doc, dirty, editing, panel } = useStore.getState();
-  if (phone && (editing !== null || panel !== null || useShell.getState().menuOpen)) return true;
+  const shell = useShell.getState();
+  if (phone && (editing !== null || panel !== null || shell.menuOpen || shell.finish !== null)) return true;
   return handheld && doc !== null && dirty;
 }
 
@@ -29,6 +30,7 @@ function back(phone: boolean): void {
   if (shell.prompt) shell.prompt.resolve(null);
   else if (shell.confirm) shell.confirm.resolve(null);
   else if (state.passwordPrompt) state.cancelPassword();
+  else if (shell.finish) shell.setFinish(null);
   else if (phone && state.editing) {
     // saves what was typed, like tapping Done
     if (editors.current) editors.current.commit();
@@ -46,7 +48,7 @@ export function useBackGuard(phone: boolean): void {
   const dirty = useStore((s) => s.dirty);
   const editing = useStore((s) => s.editing !== null);
   const panel = useStore((s) => s.panel !== null);
-  const menu = useShell((s) => s.menuOpen);
+  const menu = useShell((s) => s.menuOpen || s.finish !== null);
   const active = (phone && (editing || panel || menu)) || (handheld && doc && dirty);
 
   useEffect(() => {

@@ -101,7 +101,7 @@ export function OcrPanel() {
                       <span>
                         {l.name}
                         <small>
-                          <bdi lang={l.code}>{l.nativeName}</bdi> · {l.script}
+                          <bdi>{l.nativeName}</bdi> · {l.script}
                         </small>
                       </span>
                     </label>

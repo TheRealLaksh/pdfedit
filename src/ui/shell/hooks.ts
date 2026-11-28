@@ -15,6 +15,12 @@ export function useMediaQuery(query: string): boolean {
 /** tool rail and side panel need width; short landscape phones stay on the phone layout */
 export const useDesktop = () => useMediaQuery("(min-width: 900px) and (min-height: 480px)");
 
+/** phones and tablets show one notice at a time, small */
+export const useCompactNotices = () => useMediaQuery("(max-width: 699px), (pointer: coarse)");
+
+/** room for page thumbnails beside the page and a side panel */
+export const useWide = () => useMediaQuery("(min-width: 1100px) and (min-height: 480px)");
+
 const TYPING = 'textarea, input:not([type=checkbox], [type=radio], [type=range], [type=color], [type=file], [type=button], [readonly])';
 
 /**
