@@ -74,12 +74,13 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 <!-- handoff:auto:start -->
 ## Auto: repo state
 
-_Refreshed 28 Nov 2026, 6:39 am IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
+_Refreshed 28 Nov 2026, 6:53 am IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
 
 Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `ecff063` 2026-11-28 06:39 docs: keep owner-restricted PDFs editable with a warning
 - `1982251` 2026-11-28 00:21 docs: record summary email and secret-scan result
 - `dc0044b` 2026-11-28 00:13 docs: mark the live link
 - `622a699` 2026-11-28 00:13 docs: handoff for the live release
@@ -94,11 +95,12 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `31c2352` 2026-11-27 23:28 fix(ops): guard hostile documents and keep list box highlights
 - `72182c2` 2026-11-27 23:28 fix(engine): cap content parser nesting
 - `b4aaf22` 2026-11-27 23:28 fix(engine): restart a crashed or hung worker and replay the document
-- `011c3a4` 2026-11-27 23:06 fix(phone): landscape and 320px editor layout, dark swatches and safer service worker updates
 
 ### Uncommitted changes at refresh time
 
 ```
-M  HANDOFF.md
+A  tests/device/android.mjs
+A  tests/device/make-docs.mjs
+A  tests/device/sweep.mjs
 ```
 <!-- handoff:auto:end -->
