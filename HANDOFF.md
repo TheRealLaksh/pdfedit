@@ -52,9 +52,10 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 2. Optional: self-host tesseract scripts; paragraph reflow; one-step undo for multi-line highlight/redaction.
 
 ## Open questions / waiting on others
-- Keep, or block, editing of owner-restricted PDFs (today: warn and allow)?
+- None.
 
 ## Decisions not to undo
+- Owner-restricted PDFs stay editable with a warning; the export drops the restriction (Laksh, 28 Nov).
 - Engine MuPDF (AGPL), so the repo is public. OCR is free, in-browser only (no paid APIs).
 - Hosting: Cloudflare Pages (Laksh chose it over Vercel in the question round, although the first message said Vercel).
 - Public, no login; files never uploaded.
@@ -64,6 +65,7 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 - Small commits, pushed after each (Laksh, 27 Nov session only; ask again next session).
 
 ## Session log
+- 2026-11-28: Laksh chose to keep owner-restricted PDFs editable with a warning. No code change.
 - 2026-11-28: summary emailed to work@lakshpradhwani.com. GitGuardian "generic password" alert is made-up test PDF
   passwords in tests/ (no real secrets found in history).
 - 2026-11-28: QA round merged, all checks green, deployed, live site verified, Cloudflare script injection fixed.
@@ -72,12 +74,13 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 <!-- handoff:auto:start -->
 ## Auto: repo state
 
-_Refreshed 28 Nov 2026, 12:21 am IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
+_Refreshed 28 Nov 2026, 6:39 am IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
 
 Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `1982251` 2026-11-28 00:21 docs: record summary email and secret-scan result
 - `dc0044b` 2026-11-28 00:13 docs: mark the live link
 - `622a699` 2026-11-28 00:13 docs: handoff for the live release
 - `1969f44` 2026-11-28 00:02 fix(deploy): stop Cloudflare injecting scripts into the page without losing compression
@@ -92,7 +95,6 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `72182c2` 2026-11-27 23:28 fix(engine): cap content parser nesting
 - `b4aaf22` 2026-11-27 23:28 fix(engine): restart a crashed or hung worker and replay the document
 - `011c3a4` 2026-11-27 23:06 fix(phone): landscape and 320px editor layout, dark swatches and safer service worker updates
-- `e3f850d` 2026-11-27 22:42 docs: record Cloudflare Pages project and domain
 
 ### Uncommitted changes at refresh time
 
