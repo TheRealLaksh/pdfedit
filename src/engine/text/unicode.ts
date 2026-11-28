@@ -203,7 +203,8 @@ function paragraphIsRtl(pieces: Piece[], types: Direction[], fallback: boolean):
 }
 
 /** @param prior the reading direction of the surrounding page, used when the line itself does not say */
-export function visualToLogical(pieces: Piece[], prior?: boolean): LogicalOrder {
+/** `known`: the line's direction when it was established before (a mixed line can be read both ways) */
+export function visualToLogical(pieces: Piece[], prior?: boolean, known?: boolean): LogicalOrder {
   const n = pieces.length;
   const identity = Array.from({ length: n }, (_, i) => i);
   const types = pieces.map((p) => directionOf(p.text));
@@ -214,7 +215,7 @@ export function visualToLogical(pieces: Piece[], prior?: boolean): LogicalOrder 
     else if (t === "L") l++;
   });
   if (!r) return { order: identity, rtl: false, mirrored: new Map() };
-  const rtl = paragraphIsRtl(pieces, types, prior ?? r >= l);
+  const rtl = known ?? paragraphIsRtl(pieces, types, prior ?? r >= l);
   // separators between digits and signs next to digits travel with the number
   for (let i = 0; i < n; i++) {
     if (types[i] !== "O") continue;

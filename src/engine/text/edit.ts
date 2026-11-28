@@ -12,6 +12,7 @@ import type { Glyph, ShowOp } from "./interpret";
 import { fromFrame, styleOf, toFrame, type LineModel, type Rule, type Unit } from "./layout";
 import type { Code, PdfFont } from "./pdffont";
 import { Rewriter } from "./rewrite";
+import { rememberLines, type Placed } from "./starts";
 import { bidi, CJK, hasRtl, isComplex, reorderByLevels } from "./unicode";
 
 export interface Notes {
@@ -48,11 +49,12 @@ export async function applyEdits(ctx: EngineContext, pageIndex: number, edits: L
     let changed = false;
     if (surgical.length) {
       const rewriter = new Rewriter(ctx, page, analysis.interp!);
-      const session: Session = { ctx, analysis, rewriter, encoder: new Encoder(ctx, analysis), notes };
+      const session: Session = { ctx, analysis, rewriter, encoder: new Encoder(ctx, analysis), notes, placed: new Map() };
       let any = false;
       for (const [model, edit] of surgical) if (await editLine(session, model, edit)) any = true;
       if (any) {
         rewriter.apply();
+        rememberLines(ctx, pageIndex, analysis.models, session.placed);
         changed = true;
       }
     }
@@ -101,6 +103,8 @@ interface Session {
   rewriter: Rewriter;
   encoder: Encoder;
   notes: Notes;
+  /** where each rewritten line now begins */
+  placed: Map<LineModel, Placed>;
 }
 
 type Item = {
@@ -139,6 +143,7 @@ async function editLine(s: Session, model: LineModel, edit: LineEdit): Promise<b
   if (!edit.text.trim()) {
     allGlyphs.forEach(removeGlyph);
     for (const rule of model.rules) removeRule(rewriter, rule);
+    s.placed.set(model, null);
     return true;
   }
 
@@ -235,7 +240,7 @@ async function editLine(s: Session, model: LineModel, edit: LineEdit): Promise<b
     let gap = 0;
     if (previous?.kind === "keep") {
       if (item.kind === "keep" && item.unit.vis === previous.unit.vis + 1) gap = (item.unit.u0 - previous.unit.u1) * scale;
-      else if (item.kind !== "space") {
+      else {
         gap = tracked;
         // extra room the producer left behind a space (wide word spacing) stays, whatever follows now
         const next = model.visual[previous.unit.vis + 1];
@@ -366,7 +371,10 @@ async function editLine(s: Session, model: LineModel, edit: LineEdit): Promise<b
         const written = await fonts.writeText(s.ctx, {
           ...base,
           // copies underneath keep their own paint (shadow colour, outline)
-          ...(layer === item.ref ? {} : { colorOps: "", renderMode: layer.show.tr === 7 ? 0 : layer.show.tr % 4 }),
+          // (the style colour still names the layer's own, for the stroke that thickens a synthetic bold)
+          ...(layer === item.ref
+            ? {}
+            : { colorOps: "", renderMode: layer.show.tr === 7 ? 0 : layer.show.tr % 4, style: { ...base.style, color: styleOf(layer).color } }),
           horizontalScale: (base.horizontalScale ?? 100) * narrow,
           matrix,
           resources: rewriter.resourcesFor(layer.show.node),
@@ -419,9 +427,30 @@ async function editLine(s: Session, model: LineModel, edit: LineEdit): Promise<b
     toPage(start, baseline + descent),
     toPage(end, baseline + descent),
   ]);
-  const anchors = new Set<ShowOp>(allGlyphs.map((g) => g.show));
+  s.placed.set(model, { start: toPage(start, baseline), end: toPage(end, baseline), align });
+  // each piece of the file is checked against its own clip: text that moves left can leave the clip
+  // around it even though the line as a whole did not grow
+  const spans = new Map<ShowOp, { was: number[]; now: number[] }>();
+  const stretch = (show: ShowOp, key: "was" | "now", a: number, b: number) => {
+    let e = spans.get(show);
+    if (!e) spans.set(show, (e = { was: [Infinity, -Infinity], now: [Infinity, -Infinity] }));
+    e[key][0] = Math.min(e[key][0]!, a);
+    e[key][1] = Math.max(e[key][1]!, b);
+  };
+  for (const unit of model.units) for (const g of unit.glyphs) stretch(g.show, "was", unit.u0, unit.u1);
+  for (const item of sequence) {
+    if (item.kind === "keep") for (const g of item.unit.glyphs) stretch(g.show, "now", item.u, item.u + item.width);
+    else stretch(item.ref.show, "now", item.u, item.u + item.width);
+  }
+  const area = (a: number, b: number, v: number) =>
+    rectFromPoints([toPage(a, v - ascent), toPage(b, v - ascent), toPage(a, v + descent), toPage(b, v + descent)]);
   let clipped = false;
-  for (const show of anchors) if (!rewriter.reveal(show, line.rect, box)) clipped = true;
+  for (const [show, e] of spans) {
+    if (!show.clips.length || e.now[0]! > e.now[1]!) continue;
+    const to = area(e.now[0]!, e.now[1]!, baseline);
+    const from = e.was[0]! <= e.was[1]! ? area(e.was[0]!, e.was[1]!, model.baseline) : to;
+    if (!rewriter.reveal(show, from, to)) clipped = true;
+  }
   if (clipped) s.notes.warnings.push("Part of the new text may be hidden by a shape that clips this area of the page.");
   const bounds = s.analysis.interp!.pageRect;
   if (
@@ -614,7 +643,8 @@ async function newItems(s: Session, model: LineModel, c: Chunk): Promise<Item[]>
       } else {
         // wide enough to read as a space again, which takes more between East Asian characters
         const gap = typicalGap || (CJK.test(c.full) ? 0.6 : 0.27) * ref.size;
-        items.push({ ...base, kind: "space", ref, v, width: gap * c.scale + c.spacing });
+        // in tracked text a word gap is a space between two letter spacings
+        items.push({ ...base, kind: "space", ref, v, width: (gap + model.tracking * ref.size) * c.scale + c.spacing });
       }
       continue;
     }

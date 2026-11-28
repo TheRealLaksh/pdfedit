@@ -5,6 +5,7 @@ import { intersects, quadToRect } from "../geom";
 import type { PageKind, PageText, Point, Quad, Rect, TextLine } from "../types";
 import { interpretPage, type Interpretation } from "./interpret";
 import { buildLines, toFrame, type LineModel, type Unit } from "./layout";
+import { keepAlignment, lineStarts } from "./starts";
 import { directionOf } from "./unicode";
 
 export interface Analysis {
@@ -46,7 +47,9 @@ function build(ctx: EngineContext, pageIndex: number): Analysis {
         interp,
         interp.glyphs.filter((g) => !g.invisible),
         /Microsoft.{0,4}Word/i.test(maker),
+        lineStarts(ctx, pageIndex),
       ).filter((m) => intersects(m.line.rect, pageRect));
+      keepAlignment(ctx, pageIndex, models);
       if (cover > 0.3) {
         const hidden = interp.glyphs.filter((g) => g.invisible && g.show.tr % 4 === 3);
         if (hidden.length) {

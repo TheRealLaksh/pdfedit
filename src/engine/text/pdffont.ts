@@ -121,7 +121,7 @@ export class PdfFont {
       serif:
         !sans &&
         ((flagsValue & 2) !== 0 ||
-          /times|serif|roman|georgia|garamond|cambria|book|minion|palatino|century|caslon|baskerville|tinos|^cm(r|bx|ti)|mincho|simsun|song/.test(lname)),
+          /times|serif|roman|georgia|garamond|cambria|book|minion|palatino|century|caslon|baskerville|tinos|^cm(r|bx|ti)|mincho|simsun|song|charis|doulos|gentium|bitter|merriweather|playfair|libertine/.test(lname)),
       mono: (flagsValue & 1) !== 0 || /courier|mono|consol|menlo|typewriter|^cmtt|cousine/.test(lname),
     };
 

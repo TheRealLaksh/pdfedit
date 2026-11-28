@@ -83,6 +83,7 @@ export function createResolver(ctx: EngineContext, request: MeasureTextRequest):
   const bold = style.bold;
   const italic = style.italic;
   const errors: string[] = [];
+  const heavy = !style.fontChoice && /(?:extra|ultra)[-_ ]?bold|black|heavy/i.test(originalFont?.name ?? "");
 
   const catalogSource = (f: FontFamily, substituted: boolean): Source => {
     const want: Variant = bold ? (italic ? "j" : "b") : italic ? "i" : "r";
@@ -95,7 +96,8 @@ export function createResolver(ctx: EngineContext, request: MeasureTextRequest):
     return {
       key: url,
       family: f.family,
-      synthBold: bold && variant !== "b" && variant !== "j",
+      // the catalog stops at bold: a heavier original gets a little extra stroke
+      synthBold: bold && ((variant !== "b" && variant !== "j") || (heavy && f.key !== "anton")),
       synthItalic: italic && variant !== "i" && variant !== "j",
       substituted,
       needsShapingCheck: false,

@@ -274,6 +274,7 @@ export function adoptHiddenLayer(ctx: EngineContext, base: PageText): OcrPageSta
     if (!stored) continue;
     stored.id = line.id;
     stored.style.size = line.style.size;
+    stored.align = line.align;
   }
   return entry;
 }

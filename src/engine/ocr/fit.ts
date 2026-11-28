@@ -134,6 +134,9 @@ export class Fitter {
       (f): TextStyle => ({ ...line.style, family: f.family, serif: f.serif, mono: f.mono, bold: line.style.bold, italic: false }),
     );
 
+    // a few figures or letters look much alike in many faces: there the rest of the page decides
+    const brief = (text.match(/\p{L}/gu)?.length ?? 0) < 8;
+
     type Best = { style: TextStyle; ref: Reference; score: number };
     const tried: Best[] = [];
     const consider = async (candidate: TextStyle, bias = 0) => {
@@ -148,18 +151,23 @@ export class Fitter {
       const strokeOff = Math.abs(Math.log(original.stroke / height / (r.stroke / rh)));
       // the page-wide guess and the faces already used on this page break near ties
       const prior =
-        (candidate.serif === line.style.serif ? 0.012 : 0) +
-        (candidate.bold === line.style.bold ? 0.04 : 0) +
-        (this.used.has(candidate.family) ? 0.015 : 0) -
+        // mixed script lines are matched mostly by their other letters: the page decides serif or not
+        (candidate.serif === line.style.serif ? (brief || !latin ? 0.08 : 0.012) : 0) +
+        (candidate.bold === line.style.bold ? (brief ? 0.07 : 0.04) : 0) +
+        // the plain face guessed for the page wins near ties: a wide screen face is rarely what was printed
+        (candidate.family === line.style.family ? 0.025 : 0) +
+        (this.used.has(candidate.family) ? (brief ? 0.045 : 0.015) : 0) -
         (candidate.mono ? 0.03 : 0);
       tried.push({ style: candidate, ref, score: shape - 0.5 * widthOff - 0.3 * strokeOff + prior + bias });
     };
     const top = (n: number) => [...tried].sort((a, b) => b.score - a.score).slice(0, n);
     try {
-      for (const c of bases) await consider(c);
+      // figures alone do not show serifs reliably: only faces of the page's own kind are tried for them
+      const kind = bases.filter((c) => c.serif === line.style.serif);
+      for (const c of brief && kind.length ? kind : bases) await consider(c);
       for (const c of top(2)) await consider({ ...c.style, bold: !c.style.bold });
       // slanted type has to match clearly better: noise alone must not tilt upright text
-      for (const c of top(1)) if (latin) await consider({ ...c.style, italic: true }, -0.035);
+      for (const c of top(1)) if (latin && !brief) await consider({ ...c.style, italic: true }, -0.06);
     } catch {
       // no fonts (offline): fall back to geometry alone
     }
@@ -179,6 +187,20 @@ export class Fitter {
       // a substitute with other proportions: share the difference between size and a gentle stretch
       if (ratio < 0.95 || ratio > 1.05) size = byHeight * Math.min(1.15, Math.max(0.87, Math.sqrt(ratio)));
       hscale = Math.min(112, Math.max(89, (100 * byWidth) / size));
+    }
+    // letters far larger than the size read for the line mean that something else on the picture (art
+    // behind the words, a frame) was measured with them: keep to what was read. Smaller is fine, since
+    // recognisers often draw their boxes generously
+    const read = line.style.size;
+    if (read > 0 && size > 1.45 * read) {
+      const plain = fallbackFit(line);
+      return { fit: { ...plain.fit, size: read }, style: { ...chosen.style, size: read } };
+    }
+    // a few letters say little about their size: stay near the size read for lines of this print
+    if (brief && line.style.size > 0) {
+      const near = Math.min(line.style.size * 1.1, Math.max(line.style.size * 0.9, size));
+      if (near !== size && trustWidth) hscale = Math.min(112, Math.max(89, (100 * byWidth) / near));
+      size = near;
     }
     const k = size / REF_SIZE;
     const drops = [original.p1 - r.p1 * k, original.p50 - r.p50 * k, original.p99 - r.p99 * k].sort((a, b) => a - b);

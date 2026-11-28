@@ -11,6 +11,7 @@ import {
   isMarkOnly,
   NOSPACE_SCRIPT,
   isComplex,
+  hasRtl,
   normalizeGlyphText,
   reorderIndic,
   visualToLogical,
@@ -93,6 +94,8 @@ interface Segment {
   size: number;
   /** a piece of a line too long to be one editable line */
   long?: boolean;
+  /** begins where a line is known to begin: it is nobody's superscript */
+  own?: boolean;
 }
 
 /**
@@ -141,6 +144,8 @@ const isMark = (g: Glyph) =>
   !/^.\u094D$|^.\u09CD$|^.\u0ACD$|^.\u0B4D$/.test(g.unicode) &&
   // zero width letters (the second half of a split ligature) keep their own place in the order
   ((Math.abs(g.w) < 0.06 && !/\p{L}/u.test(g.unicode)) || (g.unicode !== "" && isMarkOnly(g.unicode) && Math.abs(g.w) < 0.35));
+/** the room the producer asked for after every letter (character spacing), page units */
+const spacingOf = (g: Glyph) => (g.show.font.vertical ? 0 : Math.max(0, g.show.tc * Math.abs(g.show.th) * g.unit));
 const emOf = (g: Glyph) => g.unit * Math.abs(g.show.size * g.show.th * g.show.font.emScale) || g.size || 1;
 
 /** vowel signs that are painted before the consonant they follow */
@@ -154,8 +159,15 @@ const blockOf = (text: string) => {
   return at < 0 ? -1 : text.charCodeAt(at) >> 7;
 };
 
-export function buildLines(page: number, interp: Interpretation, glyphs: Glyph[], typed = false): LineModel[] {
-  const models: LineModel[] = [];
+/**
+ * Where lines are known to begin and end: recorded when a page is edited, because longer text that reaches
+ * the next column would otherwise be read as one line with it, and a table border it now crosses would cut
+ * it in two.
+ */
+export type LineStart = [x: number, y: number, first: string, endX?: number, endY?: number, rtl?: boolean];
+
+export function buildLines(page: number, interp: Interpretation, glyphs: Glyph[], typed = false, starts: LineStart[] = []): LineModel[] {
+  let models: LineModel[] = [];
   const spanCount = new Map<MarkedContent, number>();
   for (const g of interp.glyphs) if (g.actual) spanCount.set(g.actual, (spanCount.get(g.actual) ?? 0) + 1);
 
@@ -190,7 +202,7 @@ export function buildLines(page: number, interp: Interpretation, glyphs: Glyph[]
       return { g, u, v, w: g.width, size: g.size || 1, em: emOf(g) };
     });
     const shadows = new Map<Glyph, Glyph[]>();
-    entries = removeShadows(entries, shadows);
+    entries = removeShadows(entries, shadows, starts);
     if (Math.abs(angle) < 0.01) {
       const columns = stackedColumns(entries);
       if (columns.length) {
@@ -211,11 +223,12 @@ export function buildLines(page: number, interp: Interpretation, glyphs: Glyph[]
         if (model) models.push(model);
       }
     }
-    for (const segment of segments(entries, interp, ex, ey)) {
-      const model = buildLine(page, segment, ex, ey, angle, shadows, spanCount, prior, typingOrder);
+    for (const segment of segments(entries, interp, ex, ey, starts)) {
+      const model = buildLine(page, segment, ex, ey, angle, shadows, spanCount, prior, typingOrder, starts);
       if (model) models.push(model);
     }
   }
+  models = foldShadows(models);
   attachRules(models, interp.rules);
   models.sort((a, b) => a.line.origin[1] - b.line.origin[1] || a.line.origin[0] - b.line.origin[0]);
   detectAlignment(models, interp);
@@ -260,16 +273,19 @@ function byAngle(glyphs: Glyph[]): { angle: number; glyphs: Glyph[] }[] {
 }
 
 /** the same glyph painted again at (almost) the same spot: keep the topmost as the real one */
-function removeShadows(entries: Entry[], shadows: Map<Glyph, Glyph[]>): Entry[] {
+function removeShadows(entries: Entry[], shadows: Map<Glyph, Glyph[]>, starts: LineStart[]): Entry[] {
   const grid = new Map<string, Entry[]>();
-  const dropped = new Set<Entry>();
+  /** the later copy of a glyph and the one it covers */
+  const pairs: [top: Entry, under: Entry][] = [];
   for (const e of entries) {
     // microscopic text needs finer cells, or thousands of glyphs share one
     const step = e.size < 1 ? Math.max(e.size, 1e-4) : 4;
     const cell = (du: number, dv: number) => `${Math.round(e.u / step) + du},${Math.round(e.v / step) + dv}`;
     let twin: Entry | null = null;
-    for (let du = -1; du <= 1 && !twin; du++)
-      for (let dv = -1; dv <= 1 && !twin; dv++)
+    // large lettering is overprinted further apart than one cell
+    const reach = Math.min(8, Math.max(1, Math.ceil((0.11 * e.size) / step)));
+    for (let du = -reach; du <= reach && !twin; du++)
+      for (let dv = -reach; dv <= reach && !twin; dv++)
         for (const [index, o] of (grid.get(cell(du, dv)) ?? []).entries()) {
           // browsers outline text by painting the same letters again from a second font
           const exact =
@@ -279,7 +295,6 @@ function removeShadows(entries: Entry[], shadows: Map<Glyph, Glyph[]>): Entry[] 
             Math.abs(o.u - e.u) < 0.02 * e.size &&
             Math.abs(o.v - e.v) < 0.02 * e.size;
           if (
-            !dropped.has(o) &&
             (exact || (o.g.code.code === e.g.code.code && o.g.show.font === e.g.show.font)) &&
             o.g.show !== e.g.show &&
             Math.abs(o.size - e.size) < 0.08 * e.size &&
@@ -293,18 +308,39 @@ function removeShadows(entries: Entry[], shadows: Map<Glyph, Glyph[]>): Entry[] 
             break;
           }
         }
-    if (twin) {
-      dropped.add(twin);
-      // the list is handed on rather than copied, however often a glyph is painted over
-      const copies = shadows.get(twin.g) ?? [];
-      copies.push(twin.g);
-      shadows.set(e.g, copies);
-      shadows.delete(twin.g);
-    }
+    if (twin) pairs.push([e, twin]);
     const key = cell(0, 0);
     let list = grid.get(key);
     if (!list) grid.set(key, (list = []));
     list.push(e);
+  }
+  if (!pairs.length) return entries;
+
+  // a copy covers a good part of what was written with it: one letter of a longer line landing on the
+  // same letter of another line (lines of an edited page can cross) is chance
+  const run = new Map<Entry, Run>();
+  for (const r of runsOf(entries, starts)) for (const e of r.entries) run.set(e, r);
+  const inked = new Map<Run, number>();
+  for (const e of entries) if (!isBlank(e.g)) inked.set(run.get(e)!, (inked.get(run.get(e)!) ?? 0) + 1);
+  const together = new Map<Run, Map<Run, number>>();
+  for (const [top, under] of pairs) {
+    if (isBlank(top.g)) continue;
+    const [a, b] = [run.get(top)!, run.get(under)!];
+    let row = together.get(a);
+    if (!row) together.set(a, (row = new Map()));
+    row.set(b, (row.get(b) ?? 0) + 1);
+  }
+  const dropped = new Set<Entry>();
+  for (const [top, under] of pairs) {
+    const [a, b] = [run.get(top)!, run.get(under)!];
+    const smaller = Math.min(inked.get(a) ?? 1, inked.get(b) ?? 1);
+    if (!isBlank(top.g) && a !== b && (together.get(a)?.get(b) ?? 0) < 0.4 * smaller) continue;
+    dropped.add(under);
+    // the list is handed on rather than copied, however often a glyph is painted over
+    const copies = shadows.get(under.g) ?? [];
+    copies.push(under.g);
+    shadows.set(top.g, copies);
+    shadows.delete(under.g);
   }
   return dropped.size ? entries.filter((e) => !dropped.has(e)) : entries;
 }
@@ -492,7 +528,118 @@ function buildCascade(page: number, runs: Cascade[], ex: Point, ey: Point, angle
   return model;
 }
 
-function segments(entries: Entry[], interp: Interpretation, ex: Point, ey: Point): Segment[] {
+/** glyphs painted one right after the other along one baseline, as producers write a piece of text */
+/** a vertical rule, line frame */
+interface Wall {
+  u: number;
+  v0: number;
+  v1: number;
+}
+
+/** a stretch that is known to be one line, line frame */
+interface Span {
+  u0: number;
+  u1: number;
+  v: number;
+}
+
+interface Run {
+  entries: Entry[];
+  from: number;
+  /** begins where a line is known to begin */
+  start: boolean;
+}
+
+function runsOf(entries: Entry[], starts: LineStart[]): Run[] {
+  const near = new Map<number, LineStart[]>();
+  for (const s of starts) {
+    const k = Math.round(s[0]);
+    for (const d of [-1, 0, 1]) {
+      let list = near.get(k + d);
+      if (!list) near.set(k + d, (list = []));
+      list.push(s);
+    }
+  }
+  const begins = (g: Glyph) =>
+    !!near.get(Math.round(g.origin[0]))?.some((s) => Math.abs(s[0] - g.origin[0]) < 0.25 && Math.abs(s[1] - g.origin[1]) < 0.25 && g.unicode.startsWith(s[2]));
+  const out: Run[] = [];
+  let run: Run | null = null;
+  let end = 0;
+  let v = 0;
+  for (const e of entries.slice().sort((a, b) => a.g.seq - b.g.seq)) {
+    const start = near.size > 0 && !isBlank(e.g) && begins(e.g);
+    if (!run || start || Math.abs(e.v - v) > 0.3 * e.size || e.u < end - 0.5 * e.em || e.u > end + 1.1 * e.em) {
+      out.push((run = { entries: [], from: e.u, start }));
+    }
+    run.entries.push(e);
+    run.from = Math.min(run.from, e.u);
+    end = e.u + e.w + spacingOf(e.g);
+    v = e.v;
+  }
+  return out;
+}
+
+/**
+ * Splits a row into layers of text that does not run into itself. Two pieces printed across each other
+ * (text typed over a dotted leader, or a lengthened line reaching into the next column) are two lines.
+ */
+function layersOf(row: Entry[], run: Map<Entry, Run>): Entry[][] {
+  const pieces = new Map<Run, Entry[]>();
+  for (const e of row) {
+    const r = run.get(e)!;
+    let list = pieces.get(r);
+    if (!list) pieces.set(r, (list = []));
+    list.push(e);
+  }
+  interface Layer {
+    entries: Entry[];
+    /** ink painted so far, by position */
+    ink: Entry[];
+    end: number;
+    /** pieces of several letters reach up to here */
+    words: number;
+  }
+  const layers: Layer[] = [];
+  const ordered = [...pieces].sort((a, b) => a[0].from - b[0].from || a[1][0]!.g.seq - b[1][0]!.g.seq);
+  const solid = (e: Entry) => !isBlank(e.g) && e.w > 0.25 * e.em;
+  const simple = (e: Entry) => !e.g.actual && !isComplex(e.g.unicode) && !hasRtl(e.g.unicode);
+  for (const [r, list] of ordered) {
+    const ink = list.filter(solid);
+    const conflicts = (l: Layer) => {
+      if (r.start && ink.length && ink[0]!.u < l.end - 0.03 * ink[0]!.em) return true;
+      let crossed = 0;
+      for (const e of ink) {
+        // only neighbours matter, and painted ink is sorted by where it begins
+        for (let i = l.ink.length - 1; i >= 0; i--) {
+          const o = l.ink[i]!;
+          if (o.u + 4 * o.em < e.u) break;
+          const overlap = Math.min(o.u + o.w, e.u + e.w) - Math.max(o.u, e.u);
+          if (overlap <= 0) continue;
+          // the same spot painted twice from two places in the file
+          if (overlap > 0.7 * Math.min(e.w, o.w) && Math.abs(e.g.seq - o.g.seq) > 3 && e.g.show !== o.g.show && !e.g.actual) return true;
+          // the letters of joined and stacked scripts overlap as part of their shape
+          if (ink.length > 1 && e.u < l.words && simple(e) && simple(o)) crossed += overlap;
+        }
+        if (crossed > 0.45 * e.em) return true;
+      }
+      return false;
+    };
+    let layer = layers.find((l) => !conflicts(l));
+    if (!layer && layers.length >= 16) layer = layers[layers.length - 1]!;
+    if (!layer) layers.push((layer = { entries: [], ink: [], end: -Infinity, words: -Infinity }));
+    for (const e of list) layer.entries.push(e);
+    for (const e of ink) {
+      let i = layer.ink.length;
+      while (i > 0 && layer.ink[i - 1]!.u > e.u) i--;
+      layer.ink.splice(i, 0, e);
+      layer.end = Math.max(layer.end, e.u + e.w);
+      if (ink.length > 1) layer.words = Math.max(layer.words, e.u + e.w);
+    }
+  }
+  return layers.map((l) => l.entries.sort((a, b) => a.u - b.u || a.g.seq - b.g.seq));
+}
+
+function segments(entries: Entry[], interp: Interpretation, ex: Point, ey: Point, starts: LineStart[]): Segment[] {
   // marks may be raised or lowered: they follow their base rather than forming their own baseline
   const bases: Entry[] = [];
   const marks: Entry[] = [];
@@ -516,76 +663,77 @@ function segments(entries: Entry[], interp: Interpretation, ex: Point, ey: Point
   if (row.length) rows.push(row);
 
   // vertical rules (table cell borders) always separate text
-  const walls: { u: number; v0: number; v1: number }[] = [];
+  const walls: Wall[] = [];
   for (const r of interp.rules) {
     const a = toFrame(r.a, ex, ey);
     const b = toFrame(r.b, ex, ey);
     if (Math.abs(a[0] - b[0]) < 1.5 && Math.abs(a[1] - b[1]) > 6) walls.push({ u: (a[0] + b[0]) / 2, v0: Math.min(a[1], b[1]), v1: Math.max(a[1], b[1]) });
   }
 
+  // stretches that are known to be one line, whatever now lies across them
+  const whole: Span[] = starts.flatMap((s) => {
+    if (s[3] === undefined) return [];
+    const [u0, v] = toFrame([s[0], s[1]], ex, ey);
+    const [u1] = toFrame([s[3], s[4]!], ex, ey);
+    return [{ u0, u1, v }];
+  });
+
   const out: Segment[] = [];
+  const run = new Map<Entry, Run>();
+  const begins = new Set<Entry>();
+  for (const r of runsOf(bases, starts)) {
+    for (const e of r.entries) run.set(e, r);
+    if (r.start) begins.add(r.entries[0]!);
+  }
   for (const r of rows) {
     r.sort((a, b) => a.u - b.u || a.g.seq - b.g.seq);
     // two unrelated texts printed over each other stay separate
-    const layers: { entries: Entry[]; end: number; last: Entry | null }[] = [];
-    for (const e of r) {
-      let layer = layers.find((l) => {
-        const last = l.last;
-        if (!last) return true;
-        const overlap = Math.min(l.end, e.u + e.w) - e.u;
-        return !(
-          overlap > 0.7 * Math.min(e.w, last.w) &&
-          e.w > 0.25 * e.em &&
-          last.w > 0.25 * last.em &&
-          Math.abs(e.g.seq - last.g.seq) > 3 &&
-          e.g.show !== last.g.show &&
-          !e.g.actual
-        );
-      });
-      if (!layer && layers.length >= 16) layer = layers[layers.length - 1]!;
-      if (!layer) layers.push((layer = { entries: [], end: -Infinity, last: null }));
-      layer.entries.push(e);
-      if (!isBlank(e.g)) {
-        layer.end = Math.max(layer.end, e.u + e.w);
-        layer.last = e;
-      }
-    }
-    for (const layer of layers) {
+    for (const layer of layersOf(r, run)) {
       let seg: Entry[] = [];
       let end = -Infinity;
       let inkEnd = -Infinity;
       let spaces = 0;
       let size = 0;
       let across = 0;
+      let spaced = 0;
       const flush = () => {
         if (seg.length > MAX_LINE) for (const part of pieces(seg)) out.push({ ...segmentOf(part), long: true });
-        else if (seg.length) out.push(segmentOf(seg));
+        else if (seg.length) out.push({ ...segmentOf(seg), own: seg.some((e) => begins.has(e)) });
         seg = [];
         end = inkEnd = -Infinity;
         spaces = 0;
         size = 0;
         across = 0;
+        spaced = 0;
       };
-      for (const e of layer.entries) {
+      for (const e of layer) {
         const blank = isBlank(e.g);
+        if (seg.length && begins.has(e)) flush();
         if (seg.length) {
           const em = Math.max(e.em, across);
-          const gap = e.u - end;
+          // spacing that is part of the text itself separates nothing
+          const gap = e.u - end - spaced;
           if (!blank) {
-            const inkGap = e.u - inkEnd;
+            const inkGap = e.u - inkEnd - spaced;
             const wall =
               inkEnd > -Infinity &&
               walls.some((w) => w.u > inkEnd - 0.5 && w.u < e.u + 0.5 && w.v0 < e.v - 0.2 * e.size && w.v1 > e.v - 0.4 * e.size);
             const ratio = Math.max(e.size, size) / Math.max(0.1, Math.min(e.size, size));
-            if (wall || gap > (spaces ? 1.6 : 1.1) * em || inkGap > 4.5 * em || (ratio > 2.2 && size > 0 && inkGap > 0.25 * em)) flush();
+            const track = inkGap > 0.9 * em ? trackedBy(seg) : 0;
+            if (
+              (wall || gap > (spaces ? 1.6 : 1.1) * em + track || inkGap > 4.5 * em || (ratio > 2.2 && size > 0 && inkGap > 0.25 * em)) &&
+              !whole.some((w) => Math.abs(w.v - e.v) < 0.3 * e.size && inkEnd > w.u0 - 0.5 && e.u < w.u1 - 0.5)
+            )
+              flush();
           }
         }
         seg.push(e);
         // a blank that jumps far ahead must not bridge the gap to the next column
-        if (!blank || end === -Infinity || e.u - end < 1.1 * e.em) end = Math.max(end, e.u + Math.max(e.w, blank ? e.g.advance : 0));
+        if (!blank || end === -Infinity || e.u - end - spaced < 1.1 * e.em) end = Math.max(end, e.u + Math.max(e.w, blank ? e.g.advance : 0));
         if (blank) spaces++;
         else {
           inkEnd = Math.max(inkEnd, e.u + e.w);
+          spaced = spacingOf(e.g);
           spaces = 0;
           size = Math.max(size, e.size);
           across = Math.max(across, e.em);
@@ -594,6 +742,9 @@ function segments(entries: Entry[], interp: Interpretation, ex: Point, ey: Point
       flush();
     }
   }
+
+  joinJustified(out, walls);
+  splitColumns(out, whole);
 
   // superscripts and subscripts join the text they annotate
   out.sort((a, b) => b.size - a.size);
@@ -620,7 +771,8 @@ function segments(entries: Entry[], interp: Interpretation, ex: Point, ey: Point
       for (let j = k + step; j >= 0 && j < byV.length; j += step) {
         const big = out[byV[j]!]!;
         if (Math.abs(big.v - small.v) > 3 * small.size + 40) break;
-        if (big === small || merged.has(big) || small.size > SCRIPT_SIZE * big.size) continue;
+        // two lines that are known to be separate stay so
+        if (big === small || merged.has(big) || small.size > SCRIPT_SIZE * big.size || (small.own && big.own)) continue;
         const dv = small.v - big.v;
         if (dv < -0.65 * big.size || dv > 0.35 * big.size) continue;
         const [b0, b1] = boxes[byV[j]!]!;
@@ -681,6 +833,235 @@ function segments(entries: Entry[], interp: Interpretation, ex: Point, ey: Point
     }
   }
   return result;
+}
+
+/**
+ * The extra room between the letters of widely tracked text, from the latest letters of a piece: a word
+ * gap there is a space plus twice that. 0 for ordinary text.
+ */
+function trackedBy(entries: Entry[]): number {
+  const gaps: number[] = [];
+  let next: Entry | null = null;
+  for (let i = entries.length - 1; i >= 0 && gaps.length < 6; i--) {
+    const e = entries[i]!;
+    if (isBlank(e.g)) {
+      next = null;
+      continue;
+    }
+    if (next) gaps.push(next.u - (e.u + e.w));
+    next = e;
+  }
+  if (gaps.length < 2) return 0;
+  const sorted = gaps.slice().sort((a, b) => a - b);
+  const median = sorted[sorted.length >> 1]!;
+  const size = entries[entries.length - 1]!.em;
+  const even = gaps.filter((g) => Math.abs(g - median) < 0.12 * size).length;
+  return median > 0.15 * size && even >= 0.75 * gaps.length ? Math.min(2.2 * median, 1.6 * size) : 0;
+}
+
+/**
+ * Justified text in a narrow column can open holes wider than the gap between two columns. Pieces joined
+ * by a real space are one line again when together they span exactly what the lines around them span.
+ */
+function joinJustified(segments: Segment[], walls: Wall[]): void {
+  const info = segments.map((s) => {
+    let left = Infinity;
+    let right = -Infinity;
+    let first: Entry | null = null;
+    let last: Entry | null = null;
+    let spaces = 0;
+    for (const e of s.entries) {
+      if (!first || e.g.seq < first.g.seq) first = e;
+      if (!last || e.g.seq > last.g.seq) last = e;
+      if (isBlank(e.g)) {
+        spaces++;
+        continue;
+      }
+      left = Math.min(left, e.u);
+      right = Math.max(right, e.u + e.w);
+    }
+    return { s, left, right, first: first!, last: last!, spaces };
+  });
+  const byFirst = new Map(info.map((i) => [i.first.g.seq, i]));
+  /** pieces that follow one another on a row, joined by a real space; every piece belongs to one */
+  const chains: (typeof info)[] = [];
+  const taken = new Set<Segment>();
+  for (const head of info.slice().sort((a, b) => a.left - b.left)) {
+    if (taken.has(head.s)) continue;
+    const chain = [head];
+    taken.add(head.s);
+    for (let tail = head; ; ) {
+      const next = byFirst.get(tail.last.g.seq + 1);
+      const em = tail.last.em;
+      if (!next || taken.has(next.s) || !isBlank(tail.last.g)) break;
+      if (Math.abs(next.s.v - head.s.v) > 0.05 * em || Math.abs(next.s.size - head.s.size) > 0.05 * em) break;
+      if (next.left < tail.right || next.left - tail.right > 9 * em) break;
+      // cells of a table are written with spaces after them too
+      if (walls.some((w) => w.u > tail.right - 0.5 && w.u < next.left + 0.5 && w.v0 < next.s.v - 0.2 * em && w.v1 > next.s.v - 0.4 * em)) break;
+      chain.push(next);
+      taken.add(next.s);
+      tail = next;
+    }
+    chains.push(chain);
+  }
+  const extents = chains.map((c) => ({
+    plain: c.length === 1,
+    v: c[0]!.s.v,
+    left: c[0]!.left,
+    right: c[c.length - 1]!.right,
+    spaced: c.some((i) => i.spaces >= 1),
+  }));
+  const gone = new Set<Segment>();
+  const join = (chain: typeof info, index: number) => {
+    if (chain.length < 2 || extents[index]!.plain) return;
+    const own = extents[index]!;
+    const size = chain[0]!.s.size;
+    const column = extents.filter(
+      (o) =>
+        o !== own &&
+        o.spaced &&
+        Math.abs(o.v - own.v) > 0.5 * size &&
+        Math.abs(o.v - own.v) < 7 * size &&
+        Math.abs(o.right - own.right) < 0.6 &&
+        // the first line of a paragraph starts a little further in
+        own.left - o.left > -0.6 &&
+        own.left - o.left < 4 * size,
+    );
+    // justified prose has lines that needed no joining; the rows of a table are all in pieces
+    if (column.filter((o) => o.plain).length < 2 || !column.some((o) => Math.abs(o.left - own.left) < 0.6)) return;
+    for (const part of chain.slice(1)) {
+      chain[0]!.s.entries.push(...part.s.entries);
+      gone.add(part.s);
+    }
+    own.plain = true;
+  };
+  // a line that was joined shows the column as well as one that never was apart
+  for (let pass = 0; pass < 3; pass++) chains.forEach(join);
+  for (let i = segments.length - 1; i >= 0; i--) if (gone.has(segments[i]!)) segments.splice(i, 1);
+}
+
+/** what a list item starts with: it stays with its text */
+const LIST_MARK = /^(?:[•‣◦▪●○·–—*>o-]|\(?[\p{N}ivxa-z]{1,3}[.)])$/iu;
+
+/**
+ * Columns of a table without borders can sit closer than the gap that separates unrelated text. They give
+ * themselves away: a gap with no space in it, the next piece written separately, and the same starting
+ * place on several rows nearby.
+ */
+function splitColumns(segments: Segment[], whole: Span[]): void {
+  interface Cut {
+    segment: Segment;
+    /** where the second piece begins */
+    at: Entry;
+  }
+  const columns = new Map<number, Cut[]>();
+  const cuts: Cut[] = [];
+  for (const segment of segments) {
+    if (segment.long || segment.entries.length < 2) continue;
+    const row = segment.entries.slice().sort((a, b) => a.u - b.u || a.g.seq - b.g.seq);
+    // the usual room between two letters of this piece: tracked or loosely set text has no columns
+    const gaps: number[] = [];
+    for (let i = 1, ink = row.filter((e) => !isBlank(e.g)); i < ink.length; i++) gaps.push(ink[i]!.u - (ink[i - 1]!.u + ink[i - 1]!.w + spacingOf(ink[i - 1]!.g)));
+    gaps.sort((a, b) => a - b);
+    const usual = Math.max(0, gaps[gaps.length >> 1] ?? 0);
+    let last: Entry | null = null;
+    let blank = false;
+    let head = "";
+    for (const e of row) {
+      if (isBlank(e.g)) {
+        blank = true;
+        continue;
+      }
+      if (last && !blank && e.g.show !== last.g.show && e.u - (last.u + last.w + spacingOf(last.g)) > 0.3 * e.em + 2.5 * usual && !LIST_MARK.test(head)) {
+        const cut = { segment, at: e };
+        cuts.push(cut);
+        const k = Math.round(e.u);
+        let list = columns.get(k);
+        if (!list) columns.set(k, (list = []));
+        list.push(cut);
+      }
+      last = e;
+      blank = false;
+      head += e.g.unicode;
+    }
+  }
+  if (cuts.length < 3) return;
+  const chosen = new Map<Segment, Entry[]>();
+  for (const cut of cuts) {
+    const rows = new Set<Segment>();
+    const k = Math.round(cut.at.u);
+    for (const d of [-1, 0, 1])
+      for (const o of columns.get(k + d) ?? []) {
+        const apart = Math.abs(o.segment.v - cut.segment.v);
+        if (o.segment !== cut.segment && Math.abs(o.at.u - cut.at.u) < 0.4 && apart > 0.5 * cut.at.size && apart < 9 * cut.at.size) rows.add(o.segment);
+      }
+    if (rows.size < 2 || whole.some((w) => Math.abs(w.v - cut.at.v) < 0.3 * cut.at.size && cut.at.u > w.u0 + 0.5 && cut.at.u < w.u1 - 0.5)) continue;
+    let list = chosen.get(cut.segment);
+    if (!list) chosen.set(cut.segment, (list = []));
+    list.push(cut.at);
+  }
+  for (let i = segments.length - 1; i >= 0; i--) {
+    const segment = segments[i]!;
+    const at = chosen.get(segment);
+    if (!at) continue;
+    const edges = at.map((e) => e.u).sort((a, b) => a - b);
+    const parts: Entry[][] = Array.from({ length: edges.length + 1 }, () => []);
+    for (const e of segment.entries) {
+      let n = 0;
+      while (n < edges.length && e.u >= edges[n]! - 0.01) n++;
+      parts[n]!.push(e);
+    }
+    segments.splice(i, 1, ...parts.filter((p) => p.length).map((p) => ({ ...segmentOf(p), own: segment.own })));
+  }
+}
+
+/**
+ * Display text with a shadow or a second coat painted well off the letters: the same words, from the same
+ * glyphs, all moved by one offset. The copy underneath belongs to the line on top, so that both change.
+ */
+function foldShadows(models: LineModel[]): LineModel[] {
+  const byText = new Map<string, LineModel[]>();
+  for (const m of models) {
+    const key = `${m.line.angle.toFixed(2)}|${m.line.text}`;
+    let list = byText.get(key);
+    if (!list) byText.set(key, (list = []));
+    list.push(m);
+  }
+  const gone = new Set<LineModel>();
+  const painted = (m: LineModel) => m.units.flatMap((u) => u.glyphs).sort((a, b) => a.seq - b.seq);
+  for (const list of byText.values()) {
+    if (list.length < 2 || list.length > 40) continue;
+    // later paint lies on top
+    const order = list.map((m) => ({ m, glyphs: painted(m) })).filter((o) => o.glyphs.length);
+    order.sort((a, b) => a.glyphs[0]!.seq - b.glyphs[0]!.seq);
+    for (let i = 0; i + 1 < order.length; i++) {
+      const under = order[i]!;
+      for (let j = i + 1; j < order.length; j++) {
+        const top = order[j]!;
+        if (under.glyphs.length !== top.glyphs.length || Math.abs(under.m.size - top.m.size) > 0.03 * top.m.size) continue;
+        const dx = under.glyphs[0]!.origin[0] - top.glyphs[0]!.origin[0];
+        const dy = under.glyphs[0]!.origin[1] - top.glyphs[0]!.origin[1];
+        const size = top.m.size;
+        if (Math.hypot(dx, dy) > 0.6 * size) continue;
+        const same = under.glyphs.every((g, k) => {
+          const t = top.glyphs[k]!;
+          return g.unicode === t.unicode && Math.abs(g.origin[0] - t.origin[0] - dx) < 0.03 * size + 0.1 && Math.abs(g.origin[1] - t.origin[1] - dy) < 0.03 * size + 0.1;
+        });
+        if (!same) continue;
+        under.glyphs.forEach((g, k) => {
+          const t = top.glyphs[k]!;
+          const copies = top.m.shadows.get(t) ?? [];
+          top.m.shadows.set(t, [...(under.m.shadows.get(g) ?? []), g, ...copies]);
+        });
+        top.m.padding.push(...under.m.padding);
+        const [a, b] = [top.m.line.rect, under.m.line.rect];
+        top.m.line.rect = [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[2], b[2]), Math.max(a[3], b[3])];
+        gone.add(under.m);
+        break;
+      }
+    }
+  }
+  return gone.size ? models.filter((m) => !gone.has(m)) : models;
 }
 
 /** cut at blanks where there are any */
@@ -949,8 +1330,11 @@ function withSpaces(units: Unit[]): Unit[] {
     if (a.text.trim() && b.text.trim()) gaps.push((b.u0 - a.u1) / Math.max(a.em, b.em));
   }
   gaps.sort((a, b) => a - b);
-  // tracked-out headings have a wide gap between every letter
-  const typical = gaps.length > 3 ? Math.min(0.6, Math.max(0, gaps[Math.floor(gaps.length * 0.4)]!)) : 0;
+  // tracked-out headings have a wide gap between every letter. In a short word that shows only when the
+  // gaps are all alike and nothing in it is a real space
+  const even =
+    (gaps.length === 3 || (gaps.length === 2 && gaps[1]! < 0.3)) && gaps.at(-1)! - gaps[0]! < 0.04 && units.every((u) => u.text.trim());
+  const typical = gaps.length > 3 || even ? Math.min(0.6, Math.max(0, gaps[Math.floor(gaps.length * 0.4)]!)) : 0;
   const out: Unit[] = [];
   for (let i = 0; i < units.length; i++) {
     const b = units[i]!;
@@ -980,6 +1364,7 @@ function buildLine(
   spanCount: Map<MarkedContent, number>,
   prior: boolean,
   typingOrder: (entries: Entry[]) => boolean,
+  starts: LineStart[],
 ): LineModel | null {
   const padding: Glyph[] = [];
   const typed = typingOrder(segment.entries);
@@ -1007,7 +1392,13 @@ function buildLine(
       g.members.length === 1 ? { ...units[g.members[0]!]!, text: g.text } : mergeUnits(g.members.map((i) => units[i]!), g.text),
     );
   }
-  return assemble(page, units, padding, segment, ex, ey, angle, shadows, prior);
+  // an edited line keeps the direction it was written in
+  const known = starts.length
+    ? starts.find(
+        (s) => s[5] !== undefined && segment.entries.some((e) => Math.abs(e.g.origin[0] - s[0]) < 0.25 && Math.abs(e.g.origin[1] - s[1]) < 0.25),
+      )?.[5]
+    : undefined;
+  return assemble(page, units, padding, segment, ex, ey, angle, shadows, prior, known);
 }
 
 /**
@@ -1061,12 +1452,14 @@ function assemble(
   angle: number,
   shadows: Map<Glyph, Glyph[]>,
   prior?: boolean,
+  known?: boolean,
 ): LineModel | null {
   units.forEach((u, i) => (u.vis = i));
   const visual = units.slice();
   const order = visualToLogical(
     visual.map((u) => ({ text: u.text, actual: u.actual })),
     prior,
+    known,
   );
   for (const [i, t] of order.mirrored) visual[i]!.text = t;
   let logical = order.order.map((i) => visual[i]!);
@@ -1142,11 +1535,14 @@ function assemble(
     }
 
   const p = (u: number, v: number) => fromFrame(u, v, ex, ey);
+  // wide character spacing after the last letter is not part of what is seen
+  const end = visualFinal[visualFinal.length - 1]!.glyphs.at(-1);
+  const trailing = end && spacingOf(end) > 0.1 * end.size ? spacingOf(end) : 0;
   const quad: Quad = [
     ...p(u0, baseline - ascent),
-    ...p(u1, baseline - ascent),
+    ...p(u1 - trailing, baseline - ascent),
     ...p(u0, baseline + descent),
-    ...p(u1, baseline + descent),
+    ...p(u1 - trailing, baseline + descent),
   ] as Quad;
   const vertical = !!units[0]!.glyphs[0]?.show.font.vertical;
 
@@ -1216,15 +1612,22 @@ function assemble(
 /** the same extra distance between (nearly) all neighbouring glyphs of a line, in ems; 0 when there is none */
 function trackingOf(visual: Unit[], ex: Point, ey: Point): number {
   const extra: number[] = [];
-  for (let i = 1; i < visual.length; i++) {
-    const a = visual[i - 1]!;
-    const b = visual[i]!;
-    if (a.glyphs.length !== 1 || b.glyphs.length !== 1 || !a.text.trim() || !b.text.trim()) continue;
-    if (isComplex(a.text) || isComplex(b.text)) continue;
-    const x = a.glyphs[0]!;
-    const y = b.glyphs[0]!;
-    if (x.show.font !== y.show.font || Math.abs(x.size - y.size) > 0.01 || x.show.font.vertical) continue;
-    extra.push((toFrame(y.origin, ex, ey)[0] - toFrame(x.origin, ex, ey)[0] - Math.abs(x.advance)) / (x.size || 1));
+  const along = (g: Glyph) => toFrame(g.origin, ex, ey)[0];
+  /** the glyph before, while no blank or complex script lies between */
+  let before: Glyph | null = null;
+  for (const unit of visual) {
+    if (!unit.text.trim() || isComplex(unit.text) || (unit.glyphs.length > 1 && !unit.actual)) {
+      before = null;
+      continue;
+    }
+    // a replacement string (text this editor drew) covers its letters one by one
+    const own = unit.glyphs.length > 1 ? unit.glyphs.slice().sort((a, b) => along(a) - along(b)) : unit.glyphs;
+    for (const y of own) {
+      const x = before;
+      before = y;
+      if (!x || x.show.font !== y.show.font || Math.abs(x.size - y.size) > 0.01 || x.show.font.vertical) continue;
+      extra.push((along(y) - along(x) - Math.abs(x.advance)) / (x.size || 1));
+    }
   }
   if (extra.length < 3) return 0;
   const median = extra.slice().sort((a, b) => a - b)[extra.length >> 1]!;
@@ -1300,6 +1703,8 @@ function attachRules(models: LineModel[], rules: Decoration[]) {
 
 function detectAlignment(models: LineModel[], interp: Interpretation) {
   const [px0, , px1] = interp.pageRect;
+  /** the narrowest left margin of the page */
+  let margin: number | undefined;
   const sorted = models.slice().sort((a, b) => a.baseline - b.baseline);
   const similar = (a: LineModel, b: LineModel) =>
     Math.abs(a.line.angle - b.line.angle) < 0.02 && Math.max(a.size, b.size) < 1.3 * Math.min(a.size, b.size);
@@ -1361,7 +1766,8 @@ function detectAlignment(models: LineModel[], interp: Interpretation) {
         if (Math.abs(o.u0 + o.u1 - m.u0 - m.u1) < 2 * tol(m)) c++;
       }
       let align: Align | null = null;
-      if (list.length >= 3 && full >= 2 && full >= list.length - 2 && Math.abs(m.u0 - left) < tol(m) && Math.abs(m.u1 - right) < tol(m))
+      // a menu or list whose entries happen to be equally long is not a justified paragraph
+      if (list.length >= 3 && full >= 2 && full >= list.length - 2 && right - left > 9 * m.size && Math.abs(m.u0 - left) < tol(m) && Math.abs(m.u1 - right) < tol(m))
         align = "justify";
       // right to left text lines up on the right; a single shared left edge is more likely chance
       else if (m.rtl && r && r + 1 >= l) align = "right";
@@ -1375,9 +1781,29 @@ function detectAlignment(models: LineModel[], interp: Interpretation) {
     }
   }
   // columns of figures are usually spaced further apart than text lines
+  const edges = (side: "u0" | "u1") => {
+    const map = new Map<number, LineModel[]>();
+    for (const m of sorted) {
+      const k = Math.round(m[side]);
+      let list = map.get(k);
+      if (!list) map.set(k, (list = []));
+      if (list.length < NEIGHBOURS) list.push(m);
+    }
+    /** lines sharing this edge of `m` but not the other one: they show which side the column holds to */
+    return (m: LineModel) => {
+      const other = side === "u0" ? "u1" : "u0";
+      let n = 0;
+      for (const d of [-1, 0, 1])
+        for (const o of map.get(Math.round(m[side]) + d) ?? [])
+          if (o !== m && Math.abs(o[side] - m[side]) < 0.6 && Math.abs(o[other] - m[other]) > 1 && Math.abs(o.line.angle - m.line.angle) < 0.02) n++;
+      return n;
+    };
+  };
+  const ragged = { left: edges("u0"), right: edges("u1") };
   for (let i = 0; i < sorted.length; i++) {
     const m = sorted[i]!;
-    if (!numeric.test(m.line.text)) continue;
+    // a lone dash stands for "nothing" in a column of figures
+    if (!numeric.test(m.line.text) && !/^\s*[-–—]\s*$/.test(m.line.text)) continue;
     let r = 0;
     let l = 0;
     for (const step of [-1, 1])
@@ -1388,7 +1814,8 @@ function detectAlignment(models: LineModel[], interp: Interpretation) {
         if (Math.abs(o.u1 - m.u1) < 1) r++;
         if (Math.abs(o.u0 - m.u0) < 1) l++;
       }
-    if (r > l) m.line.align = "right";
+    // figures of one width line up on both sides: look further for lines that settle it
+    if (r > l || (r > 0 && r === l && ragged.right(m) > ragged.left(m))) m.line.align = "right";
   }
 
   // two neighbouring long lines that end flush on both sides are justified, even when the paragraph
@@ -1408,6 +1835,31 @@ function detectAlignment(models: LineModel[], interp: Interpretation) {
     }
   }
 
+  // the indented first line of a justified paragraph is justified too: it shares only the right edge
+  for (let i = 0; i < sorted.length; i++) {
+    const a = sorted[i]!;
+    if (a.line.align === "justify" || a.units.filter((u) => !u.text.trim()).length < 3) continue;
+    for (let j = i + 1; j < sorted.length && j - i < NEIGHBOURS; j++) {
+      const b = sorted[j]!;
+      const dv = b.baseline - a.baseline;
+      if (dv > 2.4 * a.size) break;
+      const flush = Math.max(0.8, 0.08 * a.size);
+      const indent = a.u0 - b.u0;
+      if (dv < 0.7 * a.size || b.line.align !== "justify" || !similar(a, b) || Math.abs(a.u1 - b.u1) > flush || indent < 0.5 * a.size || indent > 5 * a.size) continue;
+      a.line.align = "justify";
+      a.block = { left: a.u0, right: b.u1 };
+      break;
+    }
+  }
+
+  function mirrored(m: LineModel): boolean {
+    if (margin === undefined) {
+      margin = Infinity;
+      for (const o of models) if (Math.abs(o.line.angle) < 0.01) margin = Math.min(margin, o.u0 - px0);
+    }
+    return margin > 12 && Math.abs(px1 - m.u1 - margin) < 1.5;
+  }
+
   function alone(m: LineModel): Align {
     if (Math.abs(m.line.angle) < 0.01) {
       const centre = m.line.origin[0] + (m.u1 - m.u0) / 2;
@@ -1415,7 +1867,9 @@ function detectAlignment(models: LineModel[], interp: Interpretation) {
       // a short line pushed against the margin where other lines end is right aligned
       if (!m.rtl && m.u0 > px0 + 0.45 * (px1 - px0) && models.length < 2000) {
         const level = models.filter((o) => o !== m && Math.abs(o.line.angle) < 0.01);
-        if (level.filter((o) => Math.abs(o.u1 - m.u1) < 0.8).length >= 2 && !level.some((o) => Math.abs(o.u0 - m.u0) < 1.5)) return "right";
+        const ending = level.filter((o) => Math.abs(o.u1 - m.u1) < 0.8).length;
+        // headers and footers: even one other line, or the page's own margin mirrored, says as much
+        if ((ending >= 2 || mirrored(m)) && !level.some((o) => Math.abs(o.u0 - m.u0) < 1.5)) return "right";
       }
     }
     return m.rtl ? "right" : "left";
