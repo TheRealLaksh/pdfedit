@@ -1,7 +1,7 @@
 /** Font matching, shaping (HarfBuzz), embedding and drawing new text. Owner: FONTS module. */
 import { addResource } from "../content/page";
 import type { EngineContext } from "../context";
-import type { FontChoice } from "../types";
+import type { FontChoice, PreviewFont } from "../types";
 import { catalogChoices } from "./catalog";
 import { buildOps, type FontUse } from "./draw";
 import { embeddedFont } from "./embed";
@@ -79,4 +79,9 @@ export async function writeText(ctx: EngineContext, request: WriteTextRequest): 
     job.catch(() => undefined),
   );
   return { ...planned(layout), ops: await job };
+}
+
+/** the font file that writeText would use for this choice (typing preview) */
+export async function getChoiceFont(ctx: EngineContext, choiceId: string, bold: boolean, italic: boolean): Promise<PreviewFont | null> {
+  return null;
 }

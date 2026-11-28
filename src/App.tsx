@@ -1,5 +1,5 @@
 /** App shell. Owner: SHELL module. */
-import { useEffect, useLayoutEffect } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect } from "react";
 import { useStore } from "./store";
 import { downloadWhenReady, dropOnDocument, openAnother } from "./ui/shell/actions";
 import { useBackGuard } from "./ui/shell/backGuard";
@@ -136,7 +136,12 @@ function Editor({ desktop }: { desktop: boolean }) {
   );
 }
 
+// loaded only when a picture is opened
+const ImageEditor = lazy(() => import("./image/ImageEditor").then((m) => ({ default: m.ImageEditor })));
+
 export function App() {
+  const image = useStore((s) => s.image);
+  const closeImage = useStore((s) => s.closeImage);
   const hasDoc = useStore((s) => s.doc !== null);
   const openFiles = useStore((s) => s.openFiles);
   const desktop = useDesktop();
@@ -156,7 +161,11 @@ export function App() {
 
   return (
     <>
-      {hasDoc ? (
+      {image ? (
+        <Suspense fallback={null}>
+          <ImageEditor key={`${image.name}:${image.size}:${image.lastModified}`} file={image} onClose={closeImage} />
+        </Suspense>
+      ) : hasDoc ? (
         <Editor desktop={desktop} />
       ) : (
         <>

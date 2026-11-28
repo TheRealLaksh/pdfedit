@@ -419,6 +419,10 @@ export class Engine implements EngineAPI {
 
   listFonts: EngineAPI["listFonts"] = async () => fonts.listFonts(this.context);
 
+  getLineFont: EngineAPI["getLineFont"] = async (page, lineId) => text.getLineFont(this.context, page, lineId);
+  getChoiceFont: EngineAPI["getChoiceFont"] = async (id, bold, italic) =>
+    fonts.getChoiceFont(this.context, id, bold, italic);
+
   addUserFont: EngineAPI["addUserFont"] = async (name, bytes) => fonts.addUserFont(this.context, name, bytes);
 
   /* ---------- OCR ---------- */

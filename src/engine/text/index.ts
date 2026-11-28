@@ -1,6 +1,6 @@
 /** Existing-text engine: find the text lines of a page and edit them in place. Owner: TEXT module. */
 import type { EngineContext, ModuleChange } from "../context";
-import type { FindMatch, FindOptions, LineEdit, PageText } from "../types";
+import type { FindMatch, FindOptions, LineEdit, PageText, PreviewFont } from "../types";
 import { analyze } from "./analyze";
 import { applyEdits } from "./edit";
 import { find, replace } from "./search";
@@ -25,4 +25,9 @@ export async function replaceText(
   matches?: FindMatch[],
 ): Promise<ModuleChange> {
   return replace(ctx, query, replacement, options, matches);
+}
+
+/** the embedded font behind a line, made loadable by the browser (typing preview) */
+export async function getLineFont(ctx: EngineContext, page: number, lineId: string): Promise<PreviewFont | null> {
+  return null;
 }

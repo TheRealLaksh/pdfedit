@@ -263,6 +263,17 @@ export interface ExportOptions {
   password?: string;
   /** export only these pages */
   pages?: number[];
+  /** try to get the file at or under this size by re-encoding images (upload portals) */
+  maxBytes?: number;
+}
+
+/** a font program the browser can load with FontFace, for a faithful typing preview */
+export interface PreviewFont {
+  data: Uint8Array;
+  /** name shown to the user */
+  family: string;
+  /** code points this file can draw; omitted = all it declares itself */
+  coverage?: number[];
 }
 
 export interface RenderedPage {
@@ -311,6 +322,10 @@ export interface EngineAPI {
   replaceText(query: string, replacement: string, options?: FindOptions, matches?: FindMatch[]): Promise<MutationResult>;
 
   listFonts(): Promise<FontChoice[]>;
+  /** the document's own font behind a line, rebuilt so the browser can use it; null when impossible */
+  getLineFont(page: number, lineId: string): Promise<PreviewFont | null>;
+  /** the file the engine would draw with for a font choice (picked, uploaded or substitute) */
+  getChoiceFont(choiceId: string, bold: boolean, italic: boolean): Promise<PreviewFont | null>;
   addUserFont(name: string, bytes: Uint8Array): Promise<FontChoice>;
 
   setOcrResult(result: OcrPageResult): Promise<MutationResult>;

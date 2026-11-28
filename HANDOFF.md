@@ -90,12 +90,13 @@ Device testing: `C:devandroid-sdk`, AVD `pdfedit-phone`, `tests/device/` (see sc
 <!-- handoff:auto:start -->
 ## Auto: repo state
 
-_Refreshed 28 Nov 2026, 9:00 am IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
+_Refreshed 28 Nov 2026, 9:20 am IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
 
 Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `d8569fc` 2026-11-28 09:00 test(phone): device checklist and phone browser tests
 - `e159762` 2026-11-28 09:00 feat(phone): type directly in the tapped line with one toolbar above the keyboard
 - `9f13af1` 2026-11-28 08:43 fix(text): every box groups, edits and re-edits cleanly; sweep over realistic documents
 - `ae902cd` 2026-11-28 06:56 docs: handoff for the phone fixes and next work
@@ -110,18 +111,17 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `74f6157` 2026-11-27 23:33 docs: describe features and limits
 - `a4598bd` 2026-11-27 23:33 fix(viewer): keep a tap made while a change is saving
 - `4dd84e0` 2026-11-27 23:28 test: desktop and back-navigation browser tests
-- `41fa302` 2026-11-27 23:28 fix(shell): desktop and back-navigation fixes, restriction and XFA notices
 
 ### Uncommitted changes at refresh time
 
 ```
-M  tests/device/android.mjs
-A  tests/device/phone.mjs
-M  tests/device/sweep.mjs
-M  tests/e2e/edit.spec.ts
-M  tests/e2e/helpers.ts
-M  tests/e2e/ocr.spec.ts
-A  tests/e2e/phone.spec.ts
-M  tests/e2e/ui.spec.ts
+A  docs/RESEARCH-BRIEF.md
+M  src/App.tsx
+M  src/engine/engine.ts
+M  src/engine/fonts/index.ts
+M  src/engine/text/index.ts
+M  src/engine/types.ts
+A  src/image/ImageEditor.tsx
+M  src/store/index.ts
 ```
 <!-- handoff:auto:end -->

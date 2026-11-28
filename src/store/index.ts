@@ -67,6 +67,12 @@ export interface AppState {
   theme: "system" | "light" | "dark";
 
   openFiles(files: File[]): Promise<void>;
+  /** a picture being edited in the image editor (separate from the PDF document) */
+  image: File | null;
+  openImage(file: File): void;
+  closeImage(): void;
+  /** turn pictures into a PDF and open it */
+  openImagesAsPdf(files: File[]): Promise<void>;
   openBytes(bytes: Uint8Array, fileName: string, password?: string): Promise<void>;
   submitPassword(password: string): Promise<void>;
   cancelPassword(): void;
@@ -187,6 +193,7 @@ export const useStore = create<AppState>()((set, get) => {
     staleOcrPages.clear();
     set((s) => ({
       ...fresh(),
+      image: null,
       doc: result.doc,
       session: s.session + 1,
       ocr: { ...s.ocr, running: false, progress: null, done: [] },
@@ -306,6 +313,36 @@ export const useStore = create<AppState>()((set, get) => {
       text: { family: "Noto Sans", bold: false, italic: false, serif: false, mono: false, size: 14, color: [0.07, 0.07, 0.09] },
     },
     toasts: [],
+    image: null,
+    openImage: (file) => set({ image: file }),
+    closeImage: () => set({ image: null }),
+    async openImagesAsPdf(images) {
+      try {
+        set({ busy: "Turning images into a PDF", image: null });
+        const data = await Promise.all(
+          images.map(async (file) => {
+            try {
+              // the engine drops the open document before it reads the pictures, so check them first
+              if (!/tiff?$/i.test(file.type || file.name)) (await createImageBitmap(file)).close();
+              return await toEngineImage(file);
+            } catch {
+              throw new Error(`${file.name} could not be read as an image.`);
+            }
+          }),
+        );
+        const name = images[0]!.name.replace(/.w+$/, "") + ".pdf";
+        try {
+          opened(await engine.createFromImages(data, name), new Uint8Array(), name);
+        } catch (e) {
+          // the engine no longer holds the old document: showing it would export an empty file
+          if (get().doc) await get().closeDoc();
+          throw e;
+        }
+      } catch (e) {
+        set({ busy: null });
+        get().toast(errorText(e), "error");
+      }
+    },
     ocr: { running: false, progress: null, done: [], languages: readStored<string[]>(LANG_KEY, []) },
     theme: readStored<AppState["theme"]>(THEME_KEY, "system"),
 
@@ -325,26 +362,9 @@ export const useStore = create<AppState>()((set, get) => {
         }
         const images = files.filter(isImage);
         if (images.length) {
-          set({ busy: "Turning images into a PDF" });
-          const data = await Promise.all(
-            images.map(async (file) => {
-              try {
-                // the engine drops the open document before it reads the pictures, so check them first
-                if (!/tiff?$/i.test(file.type || file.name)) (await createImageBitmap(file)).close();
-                return await toEngineImage(file);
-              } catch {
-                throw new Error(`${file.name} could not be read as an image.`);
-              }
-            }),
-          );
-          const name = images[0]!.name.replace(/\.\w+$/, "") + ".pdf";
-          try {
-            opened(await engine.createFromImages(data, name), new Uint8Array(), name);
-          } catch (e) {
-            // the engine no longer holds the old document: showing it would export an empty file
-            if (get().doc) await get().closeDoc();
-            throw e;
-          }
+          // one picture opens in the image editor; several become a PDF
+          if (images.length === 1 && !get().doc) get().openImage(images[0]!);
+          else await get().openImagesAsPdf(images);
           return;
         }
         // unknown extension: let the engine decide
