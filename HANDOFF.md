@@ -57,6 +57,7 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 3. Smaller items from the research: recent files, camera scan, print, large-file memory, paragraph reflow.
 
 ## Open questions / waiting on others
+- Block editing of identity documents in the image editor? Offered 2026-11-28, Laksh said not now. No such check exists.
 - Enable Android "share to PDFEdit" (`share_target`)? Left off: if the service worker were evicted, a shared file
   would be sent to the server. One manifest key; handling is built.
 
@@ -71,6 +72,7 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 - Small commits, pushed after each (Laksh, 27 Nov session only; ask again next session).
 
 ## Session log
+- 2026-11-28: identity-document block in the image editor offered and put on hold. No code change.
 - 2026-11-28/29: image editor: drag a line to move it (finger: tap first), arrow keys; small tabs, badges and
   buttons detected (generated-replica recall 67% to 92%); Indian-script + English lines read in auto; doubtful
   readings change only edited words or draw nothing until confirmed. Tested on generated notices, not on ID documents.
@@ -95,12 +97,13 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 <!-- handoff:auto:start -->
 ## Auto: repo state
 
-_Refreshed 28 Nov 2026, 8:40 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
+_Refreshed 28 Nov 2026, 8:51 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
 
 Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `090c844` 2026-11-28 20:40 feat(image): drag text to move it
 - `6b841b1` 2026-11-28 20:40 feat(image): find small labels, read mixed-script lines and never redraw doubtful text
 - `645609d` 2026-11-28 18:18 fix(image): make it obvious which field changes the picture
 - `4668201` 2026-11-28 18:12 docs: interface translation on hold
@@ -115,21 +118,10 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `9e68e69` 2026-11-28 09:21 docs: build plan from the research round
 - `8b7faa1` 2026-11-28 09:20 feat: contracts for faithful typing previews, size-limited export and an image editor
 - `d8569fc` 2026-11-28 09:00 test(phone): device checklist and phone browser tests
-- `e159762` 2026-11-28 09:00 feat(phone): type directly in the tapped line with one toolbar above the keyboard
 
 ### Uncommitted changes at refresh time
 
 ```
-M  src/image/ImageEditor.tsx
-M  src/image/compose.ts
-M  src/image/erase.ts
-M  src/image/session.ts
-M  src/image/strings.ts
-M  src/image/types.ts
-M  src/image/ui/Panel.tsx
-M  src/image/ui/Stage.tsx
-M  src/image/ui/image.css
-M  src/image/ui/useEditor.ts
-A  tests/e2e/image-move.spec.ts
+M  HANDOFF.md
 ```
 <!-- handoff:auto:end -->
