@@ -48,8 +48,17 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
   engine document (breaks undo).
 
 ## Next steps
-1. Laksh: try it on your own phone with real documents (keyboard behaviour above all) and note what looks off.
-2. Optional: self-host tesseract scripts; paragraph reflow; one-step undo for multi-line highlight/redaction.
+Laksh asked on 28 Nov (then went AFK; "implement it as your project"):
+1. Fix the phone UI and touch bugs and make every text box editable (two agents running: phone UI; engine boxes).
+2. Test on the real Android emulator, deploy.
+3. Run 10 research / UI-research agents and 3 feature-research agents (read-only), then apply the UI changes and
+   add the worthwhile features without asking.
+4. Add image editing: every recognisable text box in an uploaded image editable in matching style and font,
+   looking real. Keep the rule: nothing built to hide that a file was edited (mark exports, no faked metadata).
+5. Test everything, deploy, report. "Surveillance" in the request is read as supervising the agents' work; no
+   user tracking is added to a privacy product.
+
+Device testing: `C:devandroid-sdk`, AVD `pdfedit-phone`, `tests/device/` (see script headers).
 
 ## Open questions / waiting on others
 - None.
@@ -65,6 +74,8 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 - Small commits, pushed after each (Laksh, 27 Nov session only; ask again next session).
 
 ## Session log
+- 2026-11-28: phone testing set up on an Android emulator with real touches; sample boxes open correctly on a
+  single tap; two fix agents started.
 - 2026-11-28: Laksh chose to keep owner-restricted PDFs editable with a warning. No code change.
 - 2026-11-28: summary emailed to work@lakshpradhwani.com. GitGuardian "generic password" alert is made-up test PDF
   passwords in tests/ (no real secrets found in history).
@@ -74,12 +85,13 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 <!-- handoff:auto:start -->
 ## Auto: repo state
 
-_Refreshed 28 Nov 2026, 6:53 am IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
+_Refreshed 28 Nov 2026, 6:56 am IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
 
 Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `051b4a0` 2026-11-28 06:53 test(device): drive the app with real touches on an Android phone
 - `ecff063` 2026-11-28 06:39 docs: keep owner-restricted PDFs editable with a warning
 - `1982251` 2026-11-28 00:21 docs: record summary email and secret-scan result
 - `dc0044b` 2026-11-28 00:13 docs: mark the live link
@@ -94,13 +106,10 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `352af7f` 2026-11-27 23:28 fix(ocr): better mixed-language detection and pinned recognition data
 - `31c2352` 2026-11-27 23:28 fix(ops): guard hostile documents and keep list box highlights
 - `72182c2` 2026-11-27 23:28 fix(engine): cap content parser nesting
-- `b4aaf22` 2026-11-27 23:28 fix(engine): restart a crashed or hung worker and replay the document
 
 ### Uncommitted changes at refresh time
 
 ```
-A  tests/device/android.mjs
-A  tests/device/make-docs.mjs
-A  tests/device/sweep.mjs
+M  HANDOFF.md
 ```
 <!-- handoff:auto:end -->
