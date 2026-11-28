@@ -223,6 +223,10 @@ export function ImageEditor({ file, onClose }: { file: File; onClose: () => void
             selected={selected}
             mode={mode}
             compare={compare}
+            onMoveText={(id, delta) => {
+              const from = editor.doc.edits[id]?.move ?? [0, 0];
+              editor.setEdit(id, { move: [from[0] + delta[0], from[1] + delta[1]] }, "move");
+            }}
             selectedQuad={box ? (editor.renders[box.id]?.quad ?? (box.source === "ocr" ? (shownAnalysis?.quad ?? box.quad) : box.quad)) : null}
             onSelect={select}
             onDraw={(quad) => {
@@ -278,9 +282,9 @@ export function ImageEditor({ file, onClose }: { file: File; onClose: () => void
             onEdit={(patch, tag) => editor.setEdit(box.id, patch, tag)}
             onStyle={(s) => editor.setStyle(box.id, s)}
             onResetStyle={() => editor.setEdit(box.id, { style: undefined }, "")}
-            onSays={(text) => editor.setBox(box.id, { text }, "says")}
+            onSays={(text) => editor.setBox(box.id, { text, checked: true }, "says")}
             onUseAsNew={(reading, text) => {
-              editor.setBox(box.id, { text: reading }, "says-back");
+              editor.setBox(box.id, { text: reading, checked: false }, "says-back");
               editor.setEdit(box.id, { text }, "says-new");
             }}
             onReadBox={() => void readBox(box.id, box.quad)}

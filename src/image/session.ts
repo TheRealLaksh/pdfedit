@@ -3,6 +3,7 @@ import type { AssetLoader } from "../engine/context";
 import { matchLine, observe } from "./analyze/match";
 import { segment, tighten } from "./analyze/segment";
 import { renderEdit, type Prepared } from "./compose";
+import { doubtful } from "./words";
 import { familyByKey, familiesFor, nearestWeight, scriptOfText } from "./fonts/catalog";
 import { Fonts, outlines, type FaceRef } from "./fonts/shape";
 import { homography, project, quadSize } from "./geometry";
@@ -27,7 +28,7 @@ export class ImageSession {
   }
 
   prepare(box: TextBox, options: AnalyzeOptions = {}): Promise<Prepared> {
-    const key = `${box.id}|${box.source}|${box.quad.flat().map((v) => v.toFixed(2)).join(",")}|${box.text}`;
+    const key = `${box.id}|${box.source}|${box.quad.flat().map((v) => v.toFixed(2)).join(",")}|${box.text}|${box.checked ? 1 : 0}`;
     let job = this.prepared.get(key);
     if (!job) {
       job = this.build(box, options);
@@ -79,7 +80,7 @@ export class ImageSession {
       dy: 0,
       rotate: 0,
     };
-    return { text, seg, obs, match, style, align: options.align ?? "left" };
+    return { text, seg, obs, match, style, align: options.align ?? "left", unsure: !!text && doubtful(box, match?.score) };
   }
 
   async analyze(box: TextBox, options: AnalyzeOptions = {}): Promise<Analysis> {

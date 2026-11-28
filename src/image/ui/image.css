@@ -173,6 +173,9 @@
 .im-app[data-selected] .im-box:not([data-chosen]) {
   stroke: rgb(47 91 234 / 0.3);
 }
+.im-box[data-chosen] {
+  cursor: move;
+}
 .im-box:focus-visible {
   outline: none;
   stroke-width: 3px;

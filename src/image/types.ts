@@ -22,6 +22,10 @@ export interface TextBox {
   source: "ocr" | "manual";
   /** 0..100, OCR boxes only */
   confidence?: number;
+  /** 0..100, the least sure word of the reading */
+  weakest?: number;
+  /** the user typed or confirmed what the picture says */
+  checked?: boolean;
 }
 
 export type Align = "left" | "center" | "right";
@@ -66,6 +70,8 @@ export interface BoxEdit {
   align?: Align;
   /** keep the original pixels of letters that did not change (default true) */
   keep?: boolean;
+  /** the line was dragged this far, in picture pixels */
+  move?: [number, number];
 }
 
 export interface Candidate {
@@ -116,4 +122,6 @@ export interface RenderResult {
   kept: number;
   /** the new text runs past the picture */
   overflow: boolean;
+  /** the text change was not drawn: the reading looks wrong and the changed words could not be told apart */
+  unsafe?: boolean;
 }

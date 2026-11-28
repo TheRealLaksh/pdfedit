@@ -29,6 +29,8 @@ export interface StageProps {
   onDraw(quad: Quad4): void;
   onPick(color: Rgb): void;
   onCorners(id: string, quad: Quad4): void;
+  /** a line was dragged this much further, in picture pixels */
+  onMoveText(id: string, delta: Pt): void;
 }
 
 const clampScale = (s: number) => Math.min(24, Math.max(0.04, s));
@@ -43,6 +45,8 @@ export function Stage(props: StageProps) {
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [drawing, setDrawing] = useState<[Pt, Pt] | null>(null);
   const [dragging, setDragging] = useState<{ corner: number; quad: Quad4 } | null>(null);
+  /** the line being dragged: how far, and a copy of its pixels that follows the pointer */
+  const [carry, setCarry] = useState<{ id: string; delta: Pt; ghost: string; at: [number, number, number, number] } | null>(null);
   const viewRef = useRef(view);
   viewRef.current = view;
   const touched = useRef(false);
@@ -143,7 +147,31 @@ export function Stage(props: StageProps) {
 
   /* ---------- pointers ---------- */
   const pointers = useRef(new Map<number, Pt>());
-  const gesture = useRef<{ start: Pt; moved: boolean; view: View; pinch?: { distance: number; middle: Pt } } | null>(null);
+  const gesture = useRef<{ start: Pt; moved: boolean; view: View; text?: string; pinch?: { distance: number; middle: Pt } } | null>(null);
+
+  const quadOf = (box: TextBox) => props.renders[box.id]?.quad ?? box.quad;
+
+  /** the text a drag starting here would pick up: with a mouse any line, with a finger only the chosen one */
+  const grabbed = (p: Pt, pointerType: string): string | undefined => {
+    if (mode !== "select" || compare) return undefined;
+    const slack = (pointerType === "mouse" ? 2 : 10) / viewRef.current.scale;
+    const hits = boxes.filter((b) => (pointerType === "mouse" || b.id === selected) && b.text && quadDistance(quadOf(b), p) <= slack);
+    return (hits.find((b) => b.id === selected) ?? hits[0])?.id;
+  };
+
+  /** a picture of the line as it looks now */
+  const ghostOf = (box: TextBox): { ghost: string; at: [number, number, number, number] } => {
+    const [x0, y0, x1, y1] = bounds(quadOf(box));
+    const x = Math.max(0, Math.floor(x0));
+    const y = Math.max(0, Math.floor(y0));
+    const w = Math.max(1, Math.min(width, Math.ceil(x1)) - x);
+    const h = Math.max(1, Math.min(height, Math.ceil(y1)) - y);
+    const copy = document.createElement("canvas");
+    copy.width = w;
+    copy.height = h;
+    copy.getContext("2d")!.drawImage(canvas.current!, x, y, w, h, 0, 0, w, h);
+    return { ghost: copy.toDataURL(), at: [x, y, w, h] };
+  };
   const local = (e: { clientX: number; clientY: number }): Pt => {
     const r = frame.current!.getBoundingClientRect();
     return [e.clientX - r.left, e.clientY - r.top];
@@ -157,11 +185,13 @@ export function Stage(props: StageProps) {
     frame.current!.setPointerCapture(e.pointerId);
     pointers.current.set(e.pointerId, local(e));
     const points = [...pointers.current.values()];
-    if (points.length === 1) gesture.current = { start: points[0]!, moved: false, view: viewRef.current };
+    if (points.length === 1)
+      gesture.current = { start: points[0]!, moved: false, view: viewRef.current, text: grabbed(toPicture(points[0]!), e.pointerType) };
     else if (points.length === 2) {
       const [a, b] = points as [Pt, Pt];
       gesture.current = { start: a, moved: true, view: viewRef.current, pinch: { distance: Math.hypot(a[0] - b[0], a[1] - b[1]), middle: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] } };
       setDrawing(null);
+      setCarry(null);
     }
   };
 
@@ -184,7 +214,13 @@ export function Stage(props: StageProps) {
     if (!g.moved && Math.hypot(at[0] - g.start[0], at[1] - g.start[1]) < (e.pointerType === "mouse" ? 4 : 9)) return;
     g.moved = true;
     if (mode === "draw" && !g.pinch) setDrawing([inside(toPicture(g.start)), inside(toPicture(at))]);
-    else if (!g.pinch) {
+    else if (g.text && !g.pinch) {
+      const box = boxes.find((b) => b.id === g.text);
+      if (!box) return;
+      const scale = viewRef.current.scale;
+      const delta: Pt = [(at[0] - g.start[0]) / scale, (at[1] - g.start[1]) / scale];
+      setCarry((now) => (now && now.id === box.id ? { ...now, delta } : { id: box.id, delta, ...ghostOf(box) }));
+    } else if (!g.pinch) {
       touched.current = true;
       setView({ ...g.view, x: g.view.x + at[0] - g.start[0], y: g.view.y + at[1] - g.start[1] });
     }
@@ -200,7 +236,20 @@ export function Stage(props: StageProps) {
       return;
     }
     gesture.current = null;
+    const dropped = carry;
+    setCarry(null);
     if (!g || e.type === "pointercancel") return setDrawing(null);
+    if (g.text && g.moved) {
+      if (dropped) {
+        props.onMoveText(dropped.id, dropped.delta);
+        if (selected !== dropped.id) {
+          // choose what was dropped, without zooming the view away from where it landed
+          shown.current = dropped.id;
+          props.onSelect(dropped.id);
+        }
+      }
+      return;
+    }
     if (mode === "draw" && drawing) {
       const [a, b] = drawing;
       const quad = rectQuad(Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1]));
@@ -318,7 +367,8 @@ export function Stage(props: StageProps) {
         <svg className="im-overlay" width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={compare ? { display: "none" } : undefined}>
           {boxes.map((box) => {
             const isChosen = box.id === selected;
-            const quad = isChosen && handleQuad ? handleQuad : (props.renders[box.id]?.quad ?? box.quad);
+            const resting = isChosen && handleQuad ? handleQuad : quadOf(box);
+            const quad = carry?.id === box.id ? (resting.map(([x, y]) => [x + carry.delta[0], y + carry.delta[1]]) as Quad4) : resting;
             return (
               <polygon
                 key={box.id}
@@ -333,6 +383,16 @@ export function Stage(props: StageProps) {
                 aria-label={S.boxLabel(box.text)}
                 aria-pressed={isChosen}
                 onKeyDown={(e) => {
+                  // arrow keys move the chosen text (Shift: further)
+                  const step = e.shiftKey ? 10 : 1;
+                  const arrows: Record<string, Pt> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+                  const arrow = isChosen && box.text ? arrows[e.key] : undefined;
+                  if (arrow) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    props.onMoveText(box.id, arrow);
+                    return;
+                  }
                   if (e.key !== "Enter" && e.key !== " ") return;
                   e.preventDefault();
                   props.onSelect(box.id);
@@ -340,10 +400,13 @@ export function Stage(props: StageProps) {
               />
             );
           })}
+          {carry && (
+            <image href={carry.ghost} x={carry.at[0] + carry.delta[0]} y={carry.at[1] + carry.delta[1]} width={carry.at[2]} height={carry.at[3]} opacity={0.85} preserveAspectRatio="none" pointerEvents="none" />
+          )}
           {drawing && <polygon className="im-drawing" points={points(rectQuad(drawing[0][0], drawing[0][1], drawing[1][0], drawing[1][1]))} vectorEffect="non-scaling-stroke" />}
         </svg>
       </div>
-      {!compare && mode === "select" && chosen && handleQuad &&
+      {!compare && !carry && mode === "select" && chosen && handleQuad &&
         handleQuad.map((corner, i) => {
           const at = screen(corner);
           const middle = screen(centre(handleQuad));

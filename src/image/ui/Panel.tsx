@@ -79,7 +79,8 @@ export function Panel(props: PanelProps) {
   const tabs: [Tab, string][] = [["text", S.tabText], ["style", S.tabStyle], ["fine", S.tabFine]];
   const needsSays = !box.text;
   let notice: ReactNode = null;
-  if (render?.missing.length) notice = S.missing(render.missing.slice(0, 8).join(" "));
+  if (render?.unsafe) notice = S.unsafe;
+  else if (render?.missing.length) notice = S.missing(render.missing.slice(0, 8).join(" "));
   else if (render?.overflow) notice = S.overflow;
   else if (analysis?.blank && box.text) notice = S.blank;
   else if (analysis?.busy) notice = S.busy;
@@ -131,6 +132,13 @@ export function Panel(props: PanelProps) {
       <p className="im-note" role="status">
         {!analysis && box.text ? <span className="im-spin">{S.matching}</span> : notice}
       </p>
+      {render?.unsafe && (
+        <div className="im-offer">
+          <button type="button" className="im-btn" onClick={() => props.onSays(box.text)}>
+            {S.readingRight}
+          </button>
+        </div>
+      )}
       {corrected && corrected.after === box.text && edit.text === undefined && (
         <div className="im-offer" role="status">
           <p>{S.saidNotChanged}</p>

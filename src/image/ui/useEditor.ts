@@ -26,15 +26,16 @@ export type Reading = { state: "running"; status: string; progress: number } | {
 
 const empty: Doc = { boxes: [], edits: {} };
 const start = (): History => ({ past: [], now: empty, future: [], tag: "", time: 0 });
-const signature = (box: TextBox, edit: BoxEdit) => JSON.stringify([box.quad, box.text, box.source, edit]);
-export const analysisKey = (box: TextBox) => JSON.stringify([box.id, box.quad, box.text, box.source]);
+const signature = (box: TextBox, edit: BoxEdit) => JSON.stringify([box.quad, box.text, box.source, !!box.checked, edit]);
+export const analysisKey = (box: TextBox) => JSON.stringify([box.id, box.quad, box.text, box.source, !!box.checked]);
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /** an edit that asks for nothing is no edit */
 function tidy(edit: BoxEdit): BoxEdit | undefined {
   const out = { ...edit };
   if (out.style && !Object.keys(out.style).length) delete out.style;
-  return out.text === undefined && !out.style && out.align === undefined && out.keep === undefined ? undefined : out;
+  if (out.move && Math.abs(out.move[0]) < 0.5 && Math.abs(out.move[1]) < 0.5) delete out.move;
+  return out.text === undefined && !out.style && out.align === undefined && out.keep === undefined && !out.move ? undefined : out;
 }
 
 export function useEditor(file: File) {

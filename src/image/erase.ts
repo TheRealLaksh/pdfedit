@@ -366,10 +366,30 @@ export function rebuild(rgb: Float32Array, w: number, h: number, hole: Uint8Arra
   if (!holes) return { rgb: out, method: "surface" };
   const rough = dilate(banned, w, h, 2);
   const near = dilate(hole, w, h, Math.max(6, Math.min(24, Math.round(h * 0.18))));
-  const clean: number[] = [];
+  let clean: number[] = [];
   for (let i = 0; i < size; i++) if (near[i] && !hole[i] && !rough[i]) clean.push(i);
   if (clean.length < 30) for (let i = 0; i < size; i++) if (!hole[i] && !banned[i]) clean.push(i);
   if (clean.length < 8) return { rgb: pushPull(rgb, w, h, hole), method: "surface" };
+  // where the ground right round the letters is of one colour (a button, a pill, a chip), what lies
+  // beyond the edge of that shape must not tint the fill
+  const ring = dilate(hole, w, h, 2);
+  const around = clean.filter((i) => ring[i]);
+  let plain = false;
+  if (around.length >= 30) {
+    const middle = [0, 1, 2].map((c) => quantile(around.map((i) => rgb[i * 3 + c]!), 0.5));
+    const off = (i: number) => Math.max(...middle.map((m, c) => Math.abs(rgb[i * 3 + c]! - m)));
+    // most of it: a ring this far out may already touch the edge of the shape
+    const spread = quantile(around.map(off), 0.65);
+    if (spread <= (h <= 40 ? 32 : 20)) {
+      const limit = Math.max(20, spread * 1.4);
+      const alike = clean.filter((i) => off(i) <= limit);
+      if (alike.length >= 30) {
+        clean = alike;
+        // for small lettering a smooth fill beats borrowed patches, which bring the shape's edge along
+        plain = h <= 60 && around.filter((i) => off(i) <= limit).length >= around.length * 0.65;
+      }
+    }
+  }
 
   const surface = fitSurface(rgb, w, h, clean);
   const grain = (noise[0]! + noise[1]! + noise[2]!) / 3;
@@ -392,7 +412,7 @@ export function rebuild(rgb: Float32Array, w: number, h: number, hole: Uint8Arra
     if (n >= 16) averages.push(Math.max(...sum.map((v) => Math.abs(v / n))));
   }
   const even = averages.length > 20 && quantile(averages, 0.93) <= 2.6 && surface.spread <= 9;
-  if (even || (surface.spread <= Math.max(2.4, grain * 1.7) && surface.outliers < 0.04)) {
+  if (plain || even || (surface.spread <= Math.max(2.4, grain * 1.7) && surface.outliers < 0.04)) {
     // grain is borrowed block by block from real clean pixels, which keeps its strength and its clumps
     const rnd = random(7);
     const limit = Math.max(1, surface.spread * 2.5);

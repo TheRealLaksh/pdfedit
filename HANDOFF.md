@@ -101,6 +101,7 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `6b841b1` 2026-11-28 20:40 feat(image): find small labels, read mixed-script lines and never redraw doubtful text
 - `645609d` 2026-11-28 18:18 fix(image): make it obvious which field changes the picture
 - `4668201` 2026-11-28 18:12 docs: interface translation on hold
 - `6e9f750` 2026-11-28 18:07 docs: status after the second release
@@ -115,31 +116,20 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `8b7faa1` 2026-11-28 09:20 feat: contracts for faithful typing previews, size-limited export and an image editor
 - `d8569fc` 2026-11-28 09:00 test(phone): device checklist and phone browser tests
 - `e159762` 2026-11-28 09:00 feat(phone): type directly in the tapped line with one toolbar above the keyboard
-- `9f13af1` 2026-11-28 08:43 fix(text): every box groups, edits and re-edits cleanly; sweep over realistic documents
 
 ### Uncommitted changes at refresh time
 
 ```
-M HANDOFF.md
- M src/image/ImageEditor.tsx
- M src/image/compose.ts
-M  src/image/detect.ts
- M src/image/erase.ts
-A  src/image/segment.ts
- M src/image/session.ts
- M src/image/strings.ts
- M src/image/types.ts
- M src/image/ui/Panel.tsx
- M src/image/ui/Stage.tsx
- M src/image/ui/image.css
- M src/image/ui/useEditor.ts
-A  src/image/words.ts
-M  src/ocr/index.ts
-A  src/ocr/indic.ts
-A  tests/image/replicas.ts
-A  tests/image/score.ts
-A  tests/image/small.test.ts
-A  tests/image/tools/recall.test.ts
-?? tests/e2e/image-move.spec.ts
+M  src/image/ImageEditor.tsx
+M  src/image/compose.ts
+M  src/image/erase.ts
+M  src/image/session.ts
+M  src/image/strings.ts
+M  src/image/types.ts
+M  src/image/ui/Panel.tsx
+M  src/image/ui/Stage.tsx
+M  src/image/ui/image.css
+M  src/image/ui/useEditor.ts
+A  tests/e2e/image-move.spec.ts
 ```
 <!-- handoff:auto:end -->
