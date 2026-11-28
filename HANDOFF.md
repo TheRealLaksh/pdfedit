@@ -76,6 +76,8 @@ Device testing: `C:devandroid-sdk`, AVD `pdfedit-phone`, `tests/device/` (see sc
 - Small commits, pushed after each (Laksh, 27 Nov session only; ask again next session).
 
 ## Session log
+- 2026-11-28: 13 research reports (`.tmp/research/`, local only); build wave 2 started (engine, viewer, shell,
+  image editor; plan in `docs/BUILD-WAVE2.md`). Then: interface translation, QA round, deploy, report.
 - 2026-11-28: engine box QA (not committed or deployed): box sweep in `tests/text/sweep/` (see `sweep.test.ts`
   header) and fixes for how text is grouped into boxes, re-editing, clips, substitute fonts and OCR sizing.
   How a page was grouped before an edit is kept in `ctx.state.extra` (`text/starts.ts`).
@@ -90,12 +92,13 @@ Device testing: `C:devandroid-sdk`, AVD `pdfedit-phone`, `tests/device/` (see sc
 <!-- handoff:auto:start -->
 ## Auto: repo state
 
-_Refreshed 28 Nov 2026, 9:20 am IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
+_Refreshed 28 Nov 2026, 9:21 am IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
 
 Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `8b7faa1` 2026-11-28 09:20 feat: contracts for faithful typing previews, size-limited export and an image editor
 - `d8569fc` 2026-11-28 09:00 test(phone): device checklist and phone browser tests
 - `e159762` 2026-11-28 09:00 feat(phone): type directly in the tapped line with one toolbar above the keyboard
 - `9f13af1` 2026-11-28 08:43 fix(text): every box groups, edits and re-edits cleanly; sweep over realistic documents
@@ -110,18 +113,11 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `052057d` 2026-11-27 23:41 fix(text): spacing, layered and mixed-style fidelity, readable re-extraction and long lines
 - `74f6157` 2026-11-27 23:33 docs: describe features and limits
 - `a4598bd` 2026-11-27 23:33 fix(viewer): keep a tap made while a change is saving
-- `4dd84e0` 2026-11-27 23:28 test: desktop and back-navigation browser tests
 
 ### Uncommitted changes at refresh time
 
 ```
-A  docs/RESEARCH-BRIEF.md
-M  src/App.tsx
-M  src/engine/engine.ts
-M  src/engine/fonts/index.ts
-M  src/engine/text/index.ts
-M  src/engine/types.ts
-A  src/image/ImageEditor.tsx
-M  src/store/index.ts
+M  HANDOFF.md
+A  docs/BUILD-WAVE2.md
 ```
 <!-- handoff:auto:end -->
