@@ -71,6 +71,9 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 - Small commits, pushed after each (Laksh, 27 Nov session only; ask again next session).
 
 ## Session log
+- 2026-11-28: Laksh reported an image edit that did not show: they typed in the reading-correction field. That field
+  is now folded away ("Was the original read wrongly?"), the main field is labelled "New text (changes the
+  picture)", and a correction offers "Put it on the picture". Image e2e 18/18; deployed.
 - 2026-11-28 evening: Laksh put the Hindi interface translation on hold. No code change.
 - 2026-11-28 evening: build wave 2 and image editor merged, tested, deployed; live checks above.
 - 2026-11-28: 13 research reports (`.tmp/research/`, local only); build wave 2 started (engine, viewer, shell,
@@ -89,12 +92,13 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 <!-- handoff:auto:start -->
 ## Auto: repo state
 
-_Refreshed 28 Nov 2026, 6:12 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
+_Refreshed 28 Nov 2026, 6:18 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
 
 Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `4668201` 2026-11-28 18:12 docs: interface translation on hold
 - `6e9f750` 2026-11-28 18:07 docs: status after the second release
 - `402a5d6` 2026-11-28 17:48 test(device): retry the screen dump on a busy phone
 - `deca56d` 2026-11-28 17:45 fix(image): whole lines are boxed and digits read reliably
@@ -109,11 +113,15 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `e159762` 2026-11-28 09:00 feat(phone): type directly in the tapped line with one toolbar above the keyboard
 - `9f13af1` 2026-11-28 08:43 fix(text): every box groups, edits and re-edits cleanly; sweep over realistic documents
 - `ae902cd` 2026-11-28 06:56 docs: handoff for the phone fixes and next work
-- `051b4a0` 2026-11-28 06:53 test(device): drive the app with real touches on an Android phone
 
 ### Uncommitted changes at refresh time
 
 ```
 M  HANDOFF.md
+M  src/image/ImageEditor.tsx
+M  src/image/strings.ts
+M  src/image/ui/Panel.tsx
+M  src/image/ui/image.css
+M  tests/e2e/image.spec.ts
 ```
 <!-- handoff:auto:end -->

@@ -181,6 +181,25 @@ test("a box drawn by hand is read and can be retyped; corners move by keyboard",
   await expect(page.locator(".im-box[data-edited]")).toHaveCount(1);
 });
 
+test("wording typed where the reading is corrected can be put on the picture", async ({ page }) => {
+  await openPictureEditor(page, await picture(page));
+  await tapPicture(page, 240, 85);
+  await expect(textField(page)).toHaveValue("Corner Book Shop");
+  await settled(page);
+  const pixels = () => page.locator(".im-canvas").evaluate((c: HTMLCanvasElement) => c.toDataURL());
+  const before = await pixels();
+  await page.getByText("Was the original read wrongly?").click();
+  const reading = page.getByLabel("What the original says");
+  await reading.fill("Corner Tea Shop");
+  await reading.press("Enter");
+  await expect(page.getByText("the picture has not changed")).toBeVisible();
+  expect(await pixels()).toBe(before);
+  await page.getByRole("button", { name: "Put it on the picture" }).click();
+  await expect(textField(page)).toHaveValue("Corner Tea Shop");
+  await expect.poll(pixels, { timeout: 60_000 }).not.toBe(before);
+  await expect(page.locator(".im-box[data-edited]")).toHaveCount(1);
+});
+
 test("a picture can become a PDF instead", async ({ page }) => {
   await openPictureEditor(page, await picture(page));
   await page.getByRole("button", { name: "Make a PDF instead" }).click();

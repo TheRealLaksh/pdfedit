@@ -279,6 +279,10 @@ export function ImageEditor({ file, onClose }: { file: File; onClose: () => void
             onStyle={(s) => editor.setStyle(box.id, s)}
             onResetStyle={() => editor.setEdit(box.id, { style: undefined }, "")}
             onSays={(text) => editor.setBox(box.id, { text }, "says")}
+            onUseAsNew={(reading, text) => {
+              editor.setBox(box.id, { text: reading }, "says-back");
+              editor.setEdit(box.id, { text }, "says-new");
+            }}
             onReadBox={() => void readBox(box.id, box.quad)}
             reading={readingBox === box.id}
             picking={mode === "pick"}

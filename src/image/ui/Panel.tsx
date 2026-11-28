@@ -44,6 +44,8 @@ export interface PanelProps {
   onStyle(style: Partial<LineStyle>): void;
   onResetStyle(): void;
   onSays(text: string): void;
+  /** the user typed new wording where the reading is corrected: restore the reading, draw the wording */
+  onUseAsNew(reading: string, text: string): void;
   onReadBox(): void;
   reading: boolean;
   onPickColour(): void;
@@ -60,6 +62,8 @@ export function Panel(props: PanelProps) {
   const [tab, setTab] = useState<Tab>("text");
   const [says, setSays] = useState(box.text);
   useEffect(() => setSays(box.text), [box.id, box.text]);
+  /** the last correction of the reading, offered as new text in case that is what was meant */
+  const [corrected, setCorrected] = useState<{ before: string; after: string } | null>(null);
   const value = edit.text ?? analysis?.text ?? box.text;
   const style: LineStyle | null = analysis ? { ...analysis.style, ...edit.style } : null;
   const base = analysis?.style;
@@ -67,7 +71,10 @@ export function Panel(props: PanelProps) {
   const align: Align = edit.align ?? analysis?.align ?? "left";
   const commitSays = () => {
     const text = says.replace(/\s+/g, " ").trim();
-    if (text !== box.text) props.onSays(text);
+    if (text === box.text) return;
+    // with nothing typed as new text yet, this may well have been meant as the replacement
+    if (box.text && text && edit.text === undefined) setCorrected({ before: box.text, after: text });
+    props.onSays(text);
   };
   const tabs: [Tab, string][] = [["text", S.tabText], ["style", S.tabStyle], ["fine", S.tabFine]];
   const needsSays = !box.text;
@@ -101,7 +108,7 @@ export function Panel(props: PanelProps) {
       ) : (
         <div className="im-row">
           <label className="im-field">
-            <span className="im-sr">{S.newText}</span>
+            <span>{S.newText}</span>
             <input
               type="text"
               dir="auto"
@@ -124,6 +131,21 @@ export function Panel(props: PanelProps) {
       <p className="im-note" role="status">
         {!analysis && box.text ? <span className="im-spin">{S.matching}</span> : notice}
       </p>
+      {corrected && corrected.after === box.text && edit.text === undefined && (
+        <div className="im-offer" role="status">
+          <p>{S.saidNotChanged}</p>
+          <button
+            type="button"
+            className="im-btn im-primary"
+            onClick={() => {
+              props.onUseAsNew(corrected.before, corrected.after);
+              setCorrected(null);
+            }}
+          >
+            {S.useAsNew}
+          </button>
+        </div>
+      )}
       <div className="im-tabs" role="tablist">
         {tabs.map(([id, label]) => (
           <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>
@@ -135,11 +157,14 @@ export function Panel(props: PanelProps) {
         {tab === "text" && (
           <>
             {!needsSays && (
-              <label className="im-field">
-                <span>{S.says}</span>
-                <input type="text" dir="auto" value={says} onChange={(e) => setSays(e.target.value)} onBlur={commitSays} onKeyDown={(e) => e.key === "Enter" && commitSays()} />
-                <small>{S.saysHint}</small>
-              </label>
+              <details className="im-misread">
+                <summary>{S.misread}</summary>
+                <label className="im-field">
+                  <span>{S.says}</span>
+                  <input type="text" dir="auto" value={says} onChange={(e) => setSays(e.target.value)} onBlur={commitSays} onKeyDown={(e) => e.key === "Enter" && commitSays()} />
+                  <small>{S.saysHint}</small>
+                </label>
+              </details>
             )}
             <div className="im-field">
               <span id="im-align">{S.align}</span>
