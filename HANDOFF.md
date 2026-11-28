@@ -53,7 +53,7 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 
 ## Next steps
 1. Laksh: try it on your own phone (typing, tables, a photo in the image editor) and note what looks off.
-2. Translate the interface (plan: `.tmp/research/R10-ui-i18n.md`; Hindi first). Not started.
+2. Interface translation: Laksh said not now (28 Nov). Plan kept in `.tmp/research/R10-ui-i18n.md`.
 3. Smaller items from the research: recent files, camera scan, print, large-file memory, paragraph reflow.
 
 ## Open questions / waiting on others
@@ -71,6 +71,7 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 - Small commits, pushed after each (Laksh, 27 Nov session only; ask again next session).
 
 ## Session log
+- 2026-11-28 evening: Laksh put the Hindi interface translation on hold. No code change.
 - 2026-11-28 evening: build wave 2 and image editor merged, tested, deployed; live checks above.
 - 2026-11-28: 13 research reports (`.tmp/research/`, local only); build wave 2 started (engine, viewer, shell,
   image editor; plan in `docs/BUILD-WAVE2.md`). Then: interface translation, QA round, deploy, report.
@@ -88,12 +89,13 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 <!-- handoff:auto:start -->
 ## Auto: repo state
 
-_Refreshed 28 Nov 2026, 6:07 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
+_Refreshed 28 Nov 2026, 6:12 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
 
 Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `6e9f750` 2026-11-28 18:07 docs: status after the second release
 - `402a5d6` 2026-11-28 17:48 test(device): retry the screen dump on a busy phone
 - `deca56d` 2026-11-28 17:45 fix(image): whole lines are boxed and digits read reliably
 - `0921e0c` 2026-11-28 17:28 fix(image): show the whole picture when drawing a new text area
@@ -108,12 +110,10 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `9f13af1` 2026-11-28 08:43 fix(text): every box groups, edits and re-edits cleanly; sweep over realistic documents
 - `ae902cd` 2026-11-28 06:56 docs: handoff for the phone fixes and next work
 - `051b4a0` 2026-11-28 06:53 test(device): drive the app with real touches on an Android phone
-- `ecff063` 2026-11-28 06:39 docs: keep owner-restricted PDFs editable with a warning
 
 ### Uncommitted changes at refresh time
 
 ```
 M  HANDOFF.md
-M  README.md
 ```
 <!-- handoff:auto:end -->
