@@ -1,7 +1,7 @@
 /** The headline feature: tap existing text, change it, download. */
 import {
   changed, compare, done, download, editLine, editor, expect, fixture, grow, history, idle, isPhone, open, openLine, readPdf,
-  redoButton, revision, state, tapPage, test, toolbar, undoButton,
+  redoButton, revision, state, styleControls, tapLine, tapPage, test, toolbar, undoButton,
 } from "./helpers";
 
 test("tap a line, retype it, download", async ({ page }) => {
@@ -134,6 +134,7 @@ test("style bar changes weight and the line can be deleted", async ({ page }) =>
 
   await openLine(page, "en-truetype", 2);
   before = await revision(page);
+  await styleControls(page, "More options");
   await page.getByRole("button", { name: /^Delete/ }).click();
   await changed(page, before);
   ({ bytes } = await download(page));
@@ -162,11 +163,14 @@ test("edits text written at an angle", async ({ page }) => {
 test("keeps the editor visible and the tool bar out of the way", async ({ page }) => {
   await open(page, "en-standard14");
   await openLine(page, "en-standard14", 12); // the lowest line
-  const box = (await editor(page).boundingBox())!;
   const view = page.viewportSize()!;
+  // a magnified line may be wider than a phone: what must be seen is the spot being typed at
+  const spot = isPhone(page) ? page.locator("[data-pv-caret]") : editor(page);
+  await expect(spot).toBeInViewport();
+  const box = (await spot.boundingBox())!;
   expect(box.y).toBeGreaterThanOrEqual(0);
   expect(box.y + box.height).toBeLessThanOrEqual(view.height);
-  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x).toBeGreaterThanOrEqual(-1);
   expect(box.x + box.width).toBeLessThanOrEqual(view.width + 1);
   if (isPhone(page)) {
     await expect(toolbar(page)).toBeHidden();
@@ -178,7 +182,8 @@ test("keeps the editor visible and the tool bar out of the way", async ({ page }
     }
     // a short viewport stands in for the on-screen keyboard
     await page.setViewportSize({ width: view.width, height: 380 });
-    await expect(editor(page)).toBeInViewport({ ratio: 1 });
+    await expect(page.locator("[data-pv-caret]")).toBeInViewport({ ratio: 1 });
+    await expect(done(page)).toBeInViewport({ ratio: 1 });
     await page.setViewportSize(view);
   }
   await editor(page).press("Escape");
@@ -190,7 +195,7 @@ test("a finger that misses slightly still picks the nearest line", async ({ page
   await open(page, "en-truetype");
   const line = fixture("en-truetype").pages[0]!.lines[7]!;
   await expect(page.locator("[data-line-id]").first()).toBeAttached();
-  await tapPage(page, "en-truetype", (line.rect[0] + line.rect[2]) / 2, line.rect[3] + 5);
+  await tapLine(page, "en-truetype", (line.rect[0] + line.rect[2]) / 2, line.rect[3] + 5);
   await expect(editor(page)).toHaveValue(line.text);
 });
 

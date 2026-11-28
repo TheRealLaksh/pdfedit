@@ -96,6 +96,7 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `e159762` 2026-11-28 09:00 feat(phone): type directly in the tapped line with one toolbar above the keyboard
 - `9f13af1` 2026-11-28 08:43 fix(text): every box groups, edits and re-edits cleanly; sweep over realistic documents
 - `ae902cd` 2026-11-28 06:56 docs: handoff for the phone fixes and next work
 - `051b4a0` 2026-11-28 06:53 test(device): drive the app with real touches on an Android phone
@@ -110,38 +111,17 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `a4598bd` 2026-11-27 23:33 fix(viewer): keep a tap made while a change is saving
 - `4dd84e0` 2026-11-27 23:28 test: desktop and back-navigation browser tests
 - `41fa302` 2026-11-27 23:28 fix(shell): desktop and back-navigation fixes, restriction and XFA notices
-- `352af7f` 2026-11-27 23:28 fix(ocr): better mixed-language detection and pinned recognition data
 
 ### Uncommitted changes at refresh time
 
 ```
-M  src/App.tsx
-M  src/ui/shell/Feedback.tsx
-M  src/ui/shell/hooks.ts
-M  src/ui/shell/shell.css
-M  src/ui/viewer/Overlays.tsx
-M  src/ui/viewer/Viewer.tsx
-M  src/ui/viewer/editor/Dock.tsx
-A  src/ui/viewer/editor/PhoneBar.tsx
-M  src/ui/viewer/editor/Preview.tsx
-M  src/ui/viewer/editor/StyleBar.tsx
-M  src/ui/viewer/editor/TextEditor.tsx
-M  src/ui/viewer/editor/controller.ts
-M  src/ui/viewer/geometry.ts
-M  src/ui/viewer/layers/EditTextLayer.tsx
-M  src/ui/viewer/layers/PlaceLayer.tsx
-M  src/ui/viewer/layers/SelectLayer.tsx
-M  src/ui/viewer/useViewport.ts
-M  src/ui/viewer/viewer.css
-M  src/ui/viewer/viewerApi.ts
-M  src/ui/viewer/viewerStore.ts
- M tests/device/android.mjs
- M tests/device/sweep.mjs
- M tests/e2e/edit.spec.ts
- M tests/e2e/helpers.ts
- M tests/e2e/ocr.spec.ts
- M tests/e2e/ui.spec.ts
-?? tests/device/phone.mjs
-?? tests/e2e/phone.spec.ts
+M  tests/device/android.mjs
+A  tests/device/phone.mjs
+M  tests/device/sweep.mjs
+M  tests/e2e/edit.spec.ts
+M  tests/e2e/helpers.ts
+M  tests/e2e/ocr.spec.ts
+A  tests/e2e/phone.spec.ts
+M  tests/e2e/ui.spec.ts
 ```
 <!-- handoff:auto:end -->

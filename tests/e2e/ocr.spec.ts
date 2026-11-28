@@ -3,7 +3,8 @@
  * so these need a network connection. Run alone with: npx playwright test ocr
  */
 import {
-  changed, compare, done, download, editor, expect, fixture, grow, idle, open, openPanel, revision, state, tapPage, test,
+  changed, compare, done, download, editor, expect, fixture, grow, idle, open, openPanel, revision, state, styleControls, tapLine,
+  test,
 } from "./helpers";
 
 // one recognition at a time: they are CPU bound
@@ -21,8 +22,9 @@ test("recognises a scan from the on-page prompt and edits a line", async ({ page
   await idle(page);
   const line = fixture("scan-en").pages[0]!.lines[6]!;
   await expect(page.locator('[data-line-id^="ocr:"]').first()).toBeAttached();
-  await tapPage(page, "scan-en", (line.rect[0] + line.rect[2]) / 2, (line.rect[1] + line.rect[3]) / 2);
+  await tapLine(page, "scan-en", (line.rect[0] + line.rect[2]) / 2, (line.rect[1] + line.rect[3]) / 2);
   await expect(editor(page)).toHaveValue(/next meeting is on Monday/i);
+  await styleControls(page, "Font and size");
   const size = Number(await page.getByLabel("Font size").inputValue());
   expect(size, `estimated font size (the page was set in ${line.size} pt)`).toBeGreaterThan(line.size * 0.75);
   expect(size, `estimated font size (the page was set in ${line.size} pt)`).toBeLessThan(line.size * 1.25);

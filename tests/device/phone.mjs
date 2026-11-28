@@ -1,0 +1,618 @@
+/**
+ * The whole phone checklist with real touches, the real keyboard and real screenshots, on an Android
+ * emulator (or phone) showing the app in Chrome.
+ *
+ *   npm run build && npx vite preview --host 127.0.0.1 --port 4180 --strictPort
+ *   node tests/device/make-docs.mjs
+ *   node tests/device/android.mjs setup
+ *   node tests/device/phone.mjs [--only=editing,tools]
+ *
+ * Needs the corpus in tests/fixtures/pdfs. The Gboard part taps keys of an English Gboard on a
+ * 1080 x 2400 screen. Failures leave a screenshot in .tmp/device/checklist/.
+ */
+import { existsSync } from "node:fs";
+import * as d from "./android.mjs";
+
+const only = process.argv.find((a) => a.startsWith("--only="))?.slice(7).split(",");
+const OUT = ".tmp/device/checklist";
+const DOCS = ".tmp/device/docs";
+const FIXTURES = "tests/fixtures/pdfs";
+if (!existsSync(`${DOCS}/invoice.pdf`)) throw new Error("Run node tests/device/make-docs.mjs first");
+
+let failures = 0;
+let passes = 0;
+let section = "";
+function check(name, ok, detail = "") {
+  if (ok) {
+    passes++;
+    console.log(`  ok    ${name}`);
+    return true;
+  }
+  failures++;
+  const file = `${OUT}/fail-${failures}.png`;
+  try {
+    d.screenshot(file);
+  } catch {
+    /* the device went away */
+  }
+  console.log(`  FAIL  ${name}${detail ? `: ${typeof detail === "string" ? detail : JSON.stringify(detail)}` : ""}  [${file}]`);
+  return false;
+}
+
+/* ---------- looking ---------- */
+
+const state = () =>
+  d.evaluate(`(() => { const s = __pdfedit.getState();
+    const field = document.querySelector('[data-testid=line-editor]');
+    const rect = (e) => { if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height, right: r.right, bottom: r.bottom }; };
+    const view = document.querySelector('.pv-scroll');
+    return { editing: s.editing?.lineId ?? null, zoom: s.zoom, tool: s.tool, panel: s.panel, busy: s.busy, selection: s.selection,
+      revision: s.doc?.pages[0]?.revision, canUndo: s.canUndo, value: field?.value ?? null, focused: !!field && document.activeElement === field,
+      caretAt: field?.selectionEnd ?? null, fontSize: field ? parseFloat(getComputedStyle(field).fontSize) : null,
+      field: rect(field), caret: rect(document.querySelector('[data-pv-caret]')), dock: rect(document.querySelector('[data-testid=editor-dock]')),
+      view: rect(view), top: view?.scrollTop, left: view?.scrollLeft, width: innerWidth, vv: visualViewport.height, pageZoom: visualViewport.scale,
+      topBar: !!document.querySelector('.sh-top') && getComputedStyle(document.querySelector('.sh-top')).display !== 'none',
+      bottomBar: !!document.querySelector('.sh-bottom') && getComputedStyle(document.querySelector('.sh-bottom')).display !== 'none' }; })()`);
+
+const idle = () => d.waitFor("!__pdfedit.getState().busy", 60000);
+const lineTexts = (page = 0) =>
+  d.evaluate(`[...document.querySelectorAll('[data-page="${page}"] .pv-sr button')].map((b) => b.textContent.replace(/^Edit: /, ''))`);
+
+/** the box of the line with exactly this text (or containing it) */
+const lineBox = (text) =>
+  d.evaluate(`(() => { for (const layer of document.querySelectorAll('[data-testid=edit-layer]')) {
+    const texts = [...layer.querySelectorAll('.pv-sr button')].map((b) => b.textContent.replace(/^Edit: /, ''));
+    let i = texts.indexOf(${JSON.stringify(text)}); if (i < 0) i = texts.findIndex((t) => t.includes(${JSON.stringify(text)}));
+    if (i < 0) continue; const r = layer.querySelectorAll('[data-line-id]')[i].getBoundingClientRect();
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2, left: r.left, right: r.right, w: r.width, h: r.height }; }
+    return null; })()`);
+
+/** scroll a line into the clear middle of the view */
+const show = (text) =>
+  d.evaluate(`(async () => { const layer = document.querySelector('[data-testid=edit-layer]');
+    const texts = [...layer.querySelectorAll('.pv-sr button')].map((b) => b.textContent.replace(/^Edit: /, ''));
+    let i = texts.indexOf(${JSON.stringify(text)}); if (i < 0) i = texts.findIndex((t) => t.includes(${JSON.stringify(text)}));
+    const el = layer.querySelectorAll('[data-line-id]')[i]; const view = document.querySelector('.pv-scroll');
+    const r = el.getBoundingClientRect(), v = view.getBoundingClientRect();
+    if (r.top < v.top + 150 || r.bottom > v.top + 260 || r.left < 8 || r.left > v.right - 60) {
+      view.scrollTop += r.top - v.top - 200; view.scrollLeft += r.left - 40; await new Promise((ok) => setTimeout(ok, 500)); } })()`);
+
+/** tap a line with a finger; tiny crowded text magnifies first and takes a second tap */
+/** notes at the top of the page are tapped away, as a person would */
+const clearNotes = async () => {
+  await d.evaluate("__pdfedit.setState({ toasts: [] })");
+};
+
+async function openLine(text) {
+  await idle();
+  await clearNotes();
+  let box = await lineBox(text);
+  if (!box || box.y < 130 || box.y > 640 || box.x < 4 || box.x > 408) {
+    await show(text);
+    box = await lineBox(text);
+  }
+  await d.tap(box.x, box.y);
+  await d.sleep(1500);
+  let s = await state();
+  if (!s.editing) {
+    box = await lineBox(text);
+    await d.tap(box.x, box.y);
+  }
+  await d.waitFor("!!__pdfedit.getState().editing", 8000).catch(() => {});
+  await d.sleep(1600);
+  return state();
+}
+
+const button = async (selector, wait = 700) => {
+  await d.tapOn(selector);
+  await d.sleep(wait);
+};
+const named = async (selector, text, wait = 900) => {
+  const c = await d.evaluate(`(() => { const e = [...document.querySelectorAll(${JSON.stringify(selector)})].find((e) => (e.getAttribute('aria-label') || e.textContent).trim().startsWith(${JSON.stringify(text)}) && e.getBoundingClientRect().width > 0);
+    if (!e) return null; e.scrollIntoView({ block: 'nearest' }); const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
+  if (!c) throw new Error(`No ${selector} "${text}"`);
+  await d.tap(c.x, c.y);
+  await d.sleep(wait);
+};
+const type = async (text) => {
+  d.typeText(text);
+  await d.sleep(800);
+};
+/* above the bar; a corner card (hardly any height left) leaves the space left of it */
+const caretSeen = (s) =>
+  !!s.caret && !!s.dock && s.caret.y >= s.view.y - 2 && s.caret.x >= -1 && s.caret.x <= s.width + 1 &&
+  (s.dock.w < s.width * 0.6 ? s.caret.bottom <= s.view.bottom + 2 && (s.caret.x <= s.dock.x || s.caret.bottom <= s.dock.y + 2) : s.caret.bottom <= s.dock.y + 2);
+const closeEditor = async () => {
+  if (!(await state()).editing) return;
+  // the bar rides up with the keyboard: tap it once it has arrived
+  await d.sleep(1500);
+  await button("[data-testid=editor-cancel]", 1200);
+};
+const open = async (file) => {
+  await d.evaluate("__pdfedit.getState().closeDoc()");
+  await d.openPdf(file);
+  await d.waitFor("document.querySelectorAll('[data-page]').length > 0");
+  await d.sleep(900);
+};
+
+/* Gboard (English, 1080 x 2400): screen pixels of the keys */
+const KEYS = { " ": [592, 2186], "\b": [994, 2028] };
+"qwertyuiop".split("").forEach((c, i) => (KEYS[c] = [Math.round(59 + i * 106.8), 1722]));
+"asdfghjkl".split("").forEach((c, i) => (KEYS[c] = [Math.round(112 + i * 106.8), 1872]));
+"zxcvbnm".split("").forEach((c, i) => (KEYS[c] = [Math.round(218 + i * 106.8), 2028]));
+async function gboard(keys) {
+  for (const c of keys) {
+    d.shell(`input tap ${KEYS[c][0]} ${KEYS[c][1]}`);
+    await d.sleep(200);
+  }
+  await d.sleep(900);
+}
+
+/* ---------- the checklist ---------- */
+
+const sections = {
+  async editing() {
+    await open(`${DOCS}/invoice.pdf`);
+    await d.calibrate();
+
+    // tiny crowded text: magnify first, never guess
+    let box = await lineBox("Item 3 cable set");
+    await d.tap(box.x, box.y);
+    await d.sleep(1500);
+    let s = await state();
+    check("tiny crowded text: first tap magnifies, opens nothing", !s.editing && typeof s.zoom === "number" && s.zoom > 1, s);
+    check("no keyboard while only magnifying", !d.keyboardShown());
+    box = await lineBox("Item 3 cable set");
+    const before = await state();
+    await d.tap(box.x, box.y);
+    await d.sleep(2200);
+    s = await state();
+    check("second tap opens exactly that line", s.value === "Item 3 cable set", s.value);
+    check("opening a readable line does not zoom or scroll", s.zoom === before.zoom && Math.abs(s.top - before.top) < 3, [before.zoom, s.zoom, before.top, s.top]);
+    check("typing happens on the page, over the line", s.focused && Math.abs(s.field.y + s.field.h / 2 - box.y) < 8 && Math.abs(s.field.x - box.left) < 8, [s.field, box]);
+    check("field is set in 16px or more (no iOS page zoom)", s.fontSize >= 16, s.fontSize);
+    check("keyboard is up", d.keyboardShown());
+    check("caret is above the keyboard bar", caretSeen(s), s);
+    check("tool bar leaves while typing", !s.bottomBar);
+    const bar = await d.evaluate(`(() => { const keys = [...document.querySelectorAll('.pv-actions button, .pv-actions label')].map((e) => e.getBoundingClientRect());
+      const strip = document.querySelector('.pv-actions'); return { n: keys.length, outside: keys.filter((r) => r.left < -0.5 || r.right > innerWidth + 0.5).length,
+        small: keys.filter((r) => r.width < 40 || r.height < 44).length, scrolls: strip.scrollWidth - strip.clientWidth }; })()`);
+    check("style bar: every control on screen, finger sized, nothing scrolled away", bar.n === 7 && !bar.outside && !bar.small && bar.scrolls <= 0, bar);
+    d.screenshot(`${OUT}/editing.png`);
+
+    // Gboard
+    await d.evaluate("(() => { const f = document.querySelector('[data-testid=line-editor]'); f.setSelectionRange(f.value.length, f.value.length); })()");
+    await gboard(" red");
+    s = await state();
+    check("Gboard keys type into the line", s.value === "Item 3 cable set red", s.value);
+    await gboard("\b\b\b\b");
+    s = await state();
+    check("Gboard backspace deletes", s.value === "Item 3 cable set", s.value);
+
+    // caret moves
+    await d.tap(s.field.x + 6, s.field.y + s.field.h / 2);
+    await d.sleep(700);
+    s = await state();
+    check("tap inside the line moves the caret", s.editing && s.caretAt <= 2, s.caretAt);
+    await d.tap(s.field.right + 4, s.field.y + s.field.h / 2);
+    await d.sleep(700);
+    s = await state();
+    check("tap just past the end keeps the line open, caret at the end", s.editing && s.caretAt === s.value.length, [s.editing, s.caretAt]);
+
+    // switching boxes
+    await type(" A");
+    const zoom = (await state()).zoom;
+    box = await lineBox("Item 6 cable set");
+    await d.tap(box.x, box.y);
+    await d.waitFor("document.querySelector('[data-testid=line-editor]')?.value === 'Item 6 cable set'", 15000).catch(() => {});
+    await d.sleep(900);
+    s = await state();
+    check("one tap switches to another line", s.value === "Item 6 cable set" && s.focused, s.value);
+    check("switching keeps keyboard and zoom", d.keyboardShown() && s.zoom === zoom, [s.zoom, zoom]);
+    check("the first line was saved", (await lineTexts()).some((t) => /Item 3.*A/.test(t)));
+
+    // done keeps the view
+    await type(" B");
+    const here = await state();
+    await button("[data-testid=editor-done]", 2500);
+    await idle();
+    s = await state();
+    check("Done saves and closes", !s.editing && (await lineTexts()).some((t) => /Item 6.*B/.test(t)), [s.editing, await lineTexts()]);
+    check("the view stays put after Done", s.zoom === here.zoom && Math.abs(s.top - here.top) < 3 && Math.abs(s.left - here.left) < 3, [here.top, s.top, here.left, s.left, here.zoom, s.zoom]);
+    check("a Fit page button offers the way back", await d.evaluate("!!document.querySelector('.pv-fit')"));
+
+    // enter, cancel
+    s = await openLine("Item 5 cable set");
+    await type(" C");
+    d.key(66);
+    await d.sleep(2200);
+    await idle();
+    check("Enter saves", !(await state()).editing && (await lineTexts()).some((t) => /Item 5.*C/.test(t)));
+    s = await openLine("Item 7 cable set");
+    const revision = s.revision;
+    await type(" D");
+    await button("[data-testid=editor-cancel]", 1500);
+    s = await state();
+    check("Cancel discards", !s.editing && s.revision === revision);
+
+    // back button
+    s = await openLine("Item 8 cable set");
+    await type("E");
+    d.key(4);
+    await d.sleep(1500);
+    s = await state();
+    check("Back first hides only the keyboard", !!s.editing && !d.keyboardShown(), s.editing);
+    await d.tap(s.field.x + s.field.w / 2, s.field.y + s.field.h / 2);
+    await d.sleep(1500);
+    check("tapping the line brings the keyboard back", d.keyboardShown());
+    d.key(4);
+    await d.sleep(1000);
+    d.key(4);
+    await d.sleep(2500);
+    await idle();
+    s = await state();
+    check("Back again saves and closes, without leaving the app", !s.editing && s.revision > revision && (await lineTexts()).some((t) => /Item 8.*E/.test(t)));
+
+    // double tap and long press
+    await clearNotes();
+    await show("Item 9 cable set");
+    box = await lineBox("Item 9 cable set");
+    const [x, y] = await d.toScreen(box.x, box.y);
+    d.shell(`input tap ${x} ${y}; input tap ${x} ${y}`);
+    await d.sleep(2200);
+    s = await state();
+    check("double tap opens the line and it stays open", s.value === "Item 9 cable set", s);
+    await closeEditor();
+    await show("Item 10 cable set");
+    box = await lineBox("Item 10 cable set");
+    const [lx, ly] = await d.toScreen(box.x, box.y);
+    d.shell(`input swipe ${lx} ${ly} ${lx} ${ly} 900`);
+    await d.sleep(2200);
+    s = await state();
+    check("long press opens the line too", s.value === "Item 10 cable set", s.value);
+
+    // the field is a real text field: a long press in it selects, with the system's handles and menu
+    s = await state();
+    const [fx, fy] = await d.toScreen(s.field.x + 20, s.field.y + s.field.h / 2);
+    d.shell(`input swipe ${fx} ${fy} ${fx} ${fy} 900`);
+    await d.sleep(1500);
+    const picked = await d.evaluate("(() => { const f = document.querySelector('[data-testid=line-editor]'); return f && f.value.slice(f.selectionStart, f.selectionEnd); })()");
+    check("long press inside the line selects a word", !!picked && !picked.includes(" 10 "), picked);
+    d.screenshot(`${OUT}/selection.png`);
+    // tap while a change is still saving
+    await type(" F");
+    await button("[data-testid=editor-done]", 150);
+    box = await lineBox("Item 11 cable set");
+    await d.tap(box.x, box.y);
+    await d.waitFor("document.querySelector('[data-testid=line-editor]')?.value === 'Item 11 cable set'", 20000).catch(() => {});
+    check("a tap made during a save is answered", (await state()).value === "Item 11 cable set", (await state()).value);
+    await closeEditor();
+
+    // Fit page
+    await button(".pv-fit", 1200);
+    check("Fit page returns to the whole page", (await state()).zoom === "fit");
+  },
+
+  async panels() {
+    await open(`${DOCS}/invoice.pdf`);
+    let s = await openLine("Billed to");
+    check("a line opens", s.value === "Billed to", s.value);
+    const inside = () =>
+      d.evaluate(`(() => { const all = [...document.querySelectorAll('[data-testid=editor-dock] :is(button, select, input:not([type=color]), label)')].filter((e) => e.getBoundingClientRect().width > 1);
+        const dock = document.querySelector('[data-testid=editor-dock]').getBoundingClientRect();
+        return all.filter((e) => { const r = e.getBoundingClientRect(); return r.left < -0.5 || r.right > innerWidth + 0.5 || r.bottom > dock.bottom + 0.5 || r.height < 40; }).map((e) => e.getAttribute('aria-label')); })()`);
+    for (const name of ["Font and size", "Colour", "More options"]) {
+      await button(`.pv-phonebar [aria-label="${name}"]`);
+      s = await state();
+      check(`${name}: all controls visible, keyboard stays, line visible`, !(await inside()).length && d.keyboardShown() && caretSeen(s), await inside());
+      d.screenshot(`${OUT}/panel-${name.split(" ")[0]}.png`);
+    }
+    await button('.pv-phonebar [aria-label="Move"]');
+    const from = (await state()).field;
+    await button('.pv-phonebar [aria-label="Move down"]', 400);
+    await button('.pv-phonebar [aria-label="Move right"]', 600);
+    s = await state();
+    check("nudge buttons move the text", s.field.x > from.x && s.field.y > from.y, [from, s.field]);
+    const handle = await d.centre(".pv-move-handle");
+    await d.swipe(handle.x, handle.y, handle.x + 50, handle.y + 30, 500);
+    await d.sleep(900);
+    const dragged = (await state()).field;
+    check("the round handle drags the text", dragged.x > s.field.x + 30 && dragged.y > s.field.y + 15, [s.field, dragged]);
+    await named(".pv-phonebar button", "Back", 500);
+    await button('.pv-phonebar [aria-label="Colour"]', 500);
+    await button('.pv-phonebar [aria-label="Red"]', 500);
+    await button('.pv-phonebar [aria-label="Font and size"]', 500);
+    const size = await d.evaluate("document.querySelector('.pv-size').value");
+    await button('.pv-phonebar [aria-label="Larger text"]', 600);
+    check("larger text changes the size", Number(await d.evaluate("document.querySelector('.pv-size').value")) > Number(size));
+    const colour = await d.evaluate("getComputedStyle(document.querySelector('[data-testid=line-editor]')).color");
+    check("colour shows on the page", colour === "rgb(192, 38, 45)", colour);
+    check("keyboard survived the whole style bar", d.keyboardShown());
+    await button("[data-testid=editor-done]", 3000);
+    await idle();
+    check("styled text saved", (await state()).canUndo);
+  },
+
+  async gestures() {
+    await open(`${DOCS}/invoice.pdf`);
+    await d.calibrate();
+    await d.pinch(200, 400, 80, 240);
+    await d.sleep(1200);
+    let s = await state();
+    check("pinch zooms the page", typeof s.zoom === "number" && s.zoom > 1.3, s.zoom);
+    await d.pinch(200, 400, 280, 60);
+    await d.sleep(1200);
+    check("pinching back returns to fit", (await state()).zoom === "fit", (await state()).zoom);
+    await d.pinch(200, 24, 60, 260);
+    await d.sleep(700);
+    check("pinch on the top bar does not zoom the app", (await state()).pageZoom === 1, (await state()).pageZoom);
+    await d.pinch(200, 750, 60, 260);
+    await d.sleep(700);
+    check("pinch on the tool bar does not zoom the app", (await state()).pageZoom === 1, (await state()).pageZoom);
+
+    s = await openLine("Tax Invoice");
+    check("heading opens", s.value === "Tax Invoice", s.value);
+    await d.swipe(250, 330, 250, 130, 300);
+    await d.sleep(1200);
+    s = await state();
+    check("scrolling while typing keeps the line open", !!s.editing && d.keyboardShown());
+    await type("X");
+    s = await state();
+    check("typing after scrolling brings the caret back above the keyboard", s.value.includes("X") && caretSeen(s), s.caret);
+    const zoom = s.zoom;
+    await d.pinch(200, 280, 80, 200);
+    await d.sleep(1200);
+    s = await state();
+    check("pinch while typing zooms and keeps the line open", !!s.editing && s.zoom > zoom * 1.3 && s.pageZoom === 1, [zoom, s.zoom]);
+    await type("Y");
+    s = await state();
+    check("typing after a pinch shows the caret", s.value.includes("Y") && caretSeen(s), s.caret);
+    await d.pinch(200, 280, 220, 90);
+    await d.sleep(1200);
+    check("pinching out while typing keeps the line open", !!(await state()).editing);
+
+    // rotation
+    d.shell("settings put system user_rotation 1");
+    await d.sleep(3500);
+    d.disconnect();
+    await d.calibrate();
+    s = await state();
+    check("landscape: still editing, top bar makes room", !!s.editing && !s.topBar, [s.editing, s.topBar, s.vv]);
+    if (!d.keyboardShown()) {
+      await d.tap(s.field.x + s.field.w / 2, s.field.y + s.field.h / 2);
+      await d.sleep(2000);
+    }
+    check("landscape: keyboard up", d.keyboardShown());
+    await d.cdp("Input.insertText", { text: "Z" });
+    await d.sleep(1200);
+    s = await state();
+    check("landscape: caret visible above the keyboard", caretSeen(s), [s.caret, s.dock, s.view]);
+    const done = await d.centre("[data-testid=editor-done]");
+    check("landscape: Done is wholly on screen", done.x + done.w / 2 <= s.width + 1 && done.w >= 44, [done, s.width]);
+    const bar = await d.evaluate("document.querySelector('[data-testid=editor-dock]').getBoundingClientRect().toJSON()");
+    check("landscape: the bar is one row, or a corner card when almost nothing is left", bar.height < 70 && (s.vv >= 130 || bar.width < 140), [s.vv, bar]);
+    d.screenshot(`${OUT}/landscape.png`);
+    if (d.keyboardShown()) d.key(4);
+    d.shell("settings put system user_rotation 0");
+    await d.sleep(3500);
+    await d.calibrate();
+    s = await state();
+    check("back upright: still editing", !!s.editing);
+    await closeEditor();
+  },
+
+  async scripts() {
+    await open(`${DOCS}/hindi.pdf`);
+    await d.calibrate();
+    const texts = await lineTexts();
+    let s = await openLine(texts[3]);
+    check("a Hindi line opens", s.value === texts[3], s.value);
+    await d.evaluate("(() => { const f = document.querySelector('[data-testid=line-editor]'); f.setSelectionRange(f.value.length, f.value.length); })()");
+    await d.sleep(500);
+    for (const part of [" न", " नम", " नमस", " नमस्", " नमस्ते"]) {
+      await d.cdp("Input.imeSetComposition", { text: part, selectionStart: part.length, selectionEnd: part.length });
+      await d.sleep(150);
+    }
+    s = await state();
+    check("composing text (input method) appears while it is composed", s.value === `${texts[3]} नमस्ते`, s.value);
+    check("caret visible while composing", caretSeen(s), s.caret);
+    await button("[data-testid=editor-done]", 3000);
+    await idle();
+    await d.sleep(800);
+    check("Hindi saved", (await lineTexts()).some((t) => t.includes("नमस्ते")));
+  },
+
+  async tools() {
+    await open(`${DOCS}/invoice.pdf`);
+    await d.calibrate();
+    await named(".sh-bottom button", "Add text");
+    await d.tap(60, 520);
+    await d.sleep(2500);
+    let s = await state();
+    check("add text opens a box with the keyboard", s.editing?.startsWith("new:") && d.keyboardShown(), s.editing);
+    await type("hello from the phone this is a long new note");
+    d.key(66);
+    await d.sleep(500);
+    await type("second line");
+    s = await state();
+    check("Enter makes a new line in added text", s.value === "hello from the phone this is a long new note\nsecond line", s.value);
+    check("the new box stays on screen", s.field.x >= 0 && s.field.right <= s.width + 1 && caretSeen(s), s.field);
+    await button("[data-testid=editor-done]", 3000);
+    await idle();
+    await d.waitFor("!!document.querySelector('[data-testid=selection-frame]')", 15000).catch(() => {});
+    check("the added text is selected, with handles", await d.evaluate("!!document.querySelector('[data-testid=selection-frame]')"));
+    const frame = await d.centre("[data-testid=selection-frame]");
+    await d.swipe(frame.x, frame.y, frame.x + 10, frame.y - 80, 500);
+    await d.sleep(2500);
+    await idle();
+    const moved = await d.centre("[data-testid=selection-frame]");
+    check("a finger moves the added text", moved.y < frame.y - 50, [frame, moved]);
+    await named(".pv-bar button", "Edit", 2000);
+    s = await state();
+    check("Edit reopens added text", s.editing?.startsWith("object:") && d.keyboardShown(), s.editing);
+    await closeEditor();
+    await named(".sh-bottom button", "Edit text");
+    await button(".pv-fit", 1200);
+    // where a table row sits on the screen at fit width (for the highlighter)
+    const row = await lineBox("Item 4 cable set");
+
+    const pick = async (tool) => {
+      await named(".sh-bottom button", "More", 700);
+      await named(".sh-toolgrid button", tool, 900);
+    };
+    const options = () =>
+      d.evaluate(`(() => { const o = document.querySelector('.sh-options'); if (!o) return null; const row = o.querySelector('.sh-options-row');
+        const out = [...o.querySelectorAll('button, select, input, label')].filter((e) => { const r = e.getBoundingClientRect(); return r.width > 1 && (r.left < -0.5 || r.right > innerWidth + 0.5); }).length;
+        return { out, scrolls: row ? row.scrollWidth - row.clientWidth : 0, height: o.getBoundingClientRect().height, top: o.getBoundingClientRect().top }; })()`);
+    // drags in the clear lower half of the page, above the options card
+    const drag = async (x1, y1, x2, y2) => {
+      const before = (await state()).revision;
+      await d.swipe(x1, y1, x2, y2, 400);
+      await d.sleep(1800);
+      await idle();
+      return (await state()).revision > before;
+    };
+    for (const tool of ["Draw", "Rectangle", "Ellipse", "Line", "Arrow", "Whiteout"]) {
+      await pick(tool);
+      const o = await options();
+      check(`${tool}: options fit the screen, nothing cut off`, o && !o.out && o.scrolls <= 0, o);
+      d.screenshot(`${OUT}/tool-${tool}.png`);
+      check(`${tool}: a finger drag adds it`, await drag(80, 370, 260, 420));
+      if (await d.evaluate("!!__pdfedit.getState().selection")) await d.evaluate("__pdfedit.getState().select(null)");
+      await d.sleep(500);
+    }
+    await pick("Highlight");
+    check("Highlight: a swipe across a line marks it", await drag(row.left - 4, row.y, row.right + 4, row.y + 1));
+    await pick("Redact");
+    await d.swipe(80, 450, 240, 500, 400);
+    await d.sleep(900);
+    check("Redact asks before removing", await d.evaluate("!!document.querySelector('[data-testid=redact-confirm]')"));
+    const before = (await state()).revision;
+    await button("[data-testid=redact-confirm]", 3000);
+    await idle();
+    check("Redact removes after confirming", (await state()).revision > before);
+
+    // select, resize, rotate, delete
+    await pick("Rectangle");
+    await drag(80, 360, 220, 420);
+    await d.sleep(800);
+    const handles = () =>
+      d.evaluate("Object.fromEntries([...document.querySelectorAll('.pv-handle')].map((h) => { const r = h.getBoundingClientRect(); return [h.dataset.handle, { x: r.x + r.width / 2, y: r.y + r.height / 2, w: r.width }]; }))");
+    let h = await handles();
+    check("a new shape has finger sized handles", h.se && h.se.w >= 44 && h.rotate, h);
+    if (h.se) {
+      check("resize by a corner handle", await drag(h.se.x, h.se.y, h.se.x + 50, h.se.y + 30));
+      h = await handles();
+      check("turn by the rotate handle", await drag(h.rotate.x, h.rotate.y, h.rotate.x + 60, h.rotate.y + 30));
+      const revision = (await state()).revision;
+      await named(".pv-bar button", "Delete", 2000);
+      await idle();
+      check("delete the selected shape", (await state()).revision > revision && !(await state()).selection);
+    }
+    await named(".sh-bottom button", "Edit text");
+
+    // signature
+    await named(".sh-bottom button", "Sign", 1200);
+    const pad = await d.centre(".sh-signpad");
+    await d.stroke([...Array(15)].map((_, i) => ({ x: pad.x - 80 + i * 11, y: pad.y + Math.sin(i) * 25 })));
+    await d.sleep(600);
+    await named(".sh-panel-body button", "Use signature", 1200);
+    const revision = (await state()).revision;
+    await d.tap(220, 560);
+    await d.sleep(2500);
+    await idle();
+    check("a drawn signature is placed", (await state()).revision > revision);
+  },
+
+  async panelsAndFiles() {
+    await open(`${FIXTURES}/multipage.pdf`);
+    await d.calibrate();
+    const first = await lineTexts(0);
+    await named(".sh-bottom button", "Pages", 1800);
+    const grips = await d.evaluate("[...document.querySelectorAll('.sh-grip')].map((e) => { const r = e.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })");
+    await d.swipe(grips[0][0], grips[0][1], grips[2][0] - 30, grips[2][1] + 40, 900);
+    await d.sleep(2500);
+    await idle();
+    check("pages: drag by the grip reorders", (await state()).canUndo);
+    await d.sleep(500);
+    d.key(4);
+    await d.sleep(1200);
+    check("Back closes the sheet", (await state()).panel === null && (await d.evaluate("!!__pdfedit.getState().doc")));
+    await d.sleep(500);
+    check("the first page changed", JSON.stringify(await lineTexts(0)) !== JSON.stringify(first));
+
+    await named(".sh-bottom button", "More", 700);
+    await named(".sh-item", "Find and replace", 1800);
+    await type("weather");
+    await d.sleep(1200);
+    let s = await state();
+    check("find: matches found", (await d.evaluate("__pdfedit.getState().search.matches.length")) >= 5);
+    check("find: tool bar leaves while the keyboard is up", d.keyboardShown() && !s.bottomBar);
+    d.screenshot(`${OUT}/find.png`);
+    d.key(4);
+    await d.sleep(800);
+    d.key(4);
+    await d.sleep(1200);
+    check("find closes with Back", (await state()).panel === null);
+
+    await open(`${FIXTURES}/forms.pdf`);
+    await named(".sh-bottom button", "More", 700);
+    await named(".sh-item", "Fill forms", 1500);
+    const field = await d.centre(".sh-panel-body input[type=text], .sh-panel-body input:not([type])");
+    await d.tap(field.x, field.y);
+    await d.sleep(1500);
+    await type("Ravi");
+    const seen = await d.evaluate("(() => { const r = document.activeElement.getBoundingClientRect(); return r.top >= 0 && r.bottom <= visualViewport.height; })()");
+    check("forms: the field stays above the keyboard", seen);
+    d.key(66);
+    await d.sleep(1500);
+    if (d.keyboardShown()) d.key(4);
+    await d.sleep(800);
+    // the keyboard may already have gone, in which case that Back closed the sheet
+    if ((await state()).panel) await named(".sh-panel-head button", "Close panel", 800);
+    await idle();
+    check("forms: value saved", (await state()).canUndo);
+
+    // an image that was already in the file
+    await open(`${FIXTURES}/images.pdf`);
+    await named(".sh-bottom button", "More", 700);
+    await named(".sh-toolgrid button", "Select", 1500);
+    // a point inside the first picture of the fixture, in page points
+    const at = await d.evaluate(`(() => { const r = document.querySelector('[data-page="0"]').getBoundingClientRect();
+      const w = __pdfedit.getState().doc.pages[0].width; return { x: r.x + (130 * r.width) / w, y: r.y + (135 * r.width) / w }; })()`);
+    await d.tap(at.x, at.y);
+    await d.sleep(1800);
+    check("an image in the file can be picked with a finger", (await state()).selection?.type === "image", (await state()).selection);
+    if ((await state()).selection) {
+      const before = (await state()).revision;
+      await d.swipe(at.x, at.y, at.x + 50, at.y + 60, 500);
+      await d.sleep(2500);
+      await idle();
+      check("and moved", (await state()).revision > before);
+    }
+
+    // download (the click is caught so Android does not leave Chrome for a viewer)
+    await d.evaluate("window.__saved = null; HTMLAnchorElement.prototype.click = function () { if (this.download) window.__saved = this.download; }");
+    await button(".sh-iconbtn-primary", 2500);
+    check("download saves the edited file", (await d.evaluate("window.__saved")) === "images (edited).pdf", await d.evaluate("window.__saved"));
+  },
+};
+
+d.shell("settings put system accelerometer_rotation 0; settings put system user_rotation 0");
+for (const [name, run] of Object.entries(sections)) {
+  if (only && !only.includes(name)) continue;
+  section = name;
+  console.log(`\n== ${name}`);
+  try {
+    // every section starts from a freshly loaded app
+    await d.reload();
+    await run();
+  } catch (error) {
+    check(`${section} ran to the end`, false, error.message);
+  }
+}
+d.shell("settings put system user_rotation 0");
+check("no page errors", !d.errors.length, d.errors.slice(0, 5));
+console.log(`\n${passes} passed, ${failures} failed`);
+d.disconnect();
+process.exit(failures ? 1 : 0);

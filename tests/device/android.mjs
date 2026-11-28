@@ -64,11 +64,15 @@ async function connect() {
     if (m.id && waiting.has(m.id)) {
       waiting.get(m.id)(m);
       waiting.delete(m.id);
-    } else if (m.method === "Runtime.exceptionThrown") errors.push(m.params.exceptionDetails.exception?.description ?? m.params.exceptionDetails.text);
+    }
+    // "Leave site?" after unsaved changes: a test reload always means yes
+    else if (m.method === "Page.javascriptDialogOpening") send("Page.handleJavaScriptDialog", { accept: true }).catch(() => {});
+    else if (m.method === "Runtime.exceptionThrown") errors.push(m.params.exceptionDetails.exception?.description ?? m.params.exceptionDetails.text);
     else if (m.method === "Runtime.consoleAPICalled" && m.params.type === "error")
       errors.push(m.params.args.map((a) => a.value ?? a.description).join(" "));
   };
   await send("Runtime.enable");
+  await send("Page.enable");
 }
 
 function send(method, params = {}) {
@@ -84,12 +88,60 @@ function send(method, params = {}) {
   });
 }
 
+/** upright, no keyboard, a freshly loaded app (the newest build) */
+export async function reload() {
+  shell("settings put system accelerometer_rotation 0; settings put system user_rotation 0");
+  if (keyboardShown()) shell("input keyevent 4");
+  await cdp("Page.reload", { ignoreCache: true });
+  await sleep(2000);
+  await waitFor("!!window.__pdfedit && document.readyState === 'complete'");
+  mapping = undefined;
+}
+
 /** evaluate an expression in the page (promises are awaited) */
 export async function evaluate(expression) {
   await connect();
   const r = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
   if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description ?? r.exceptionDetails.text);
   return r.result.value;
+}
+
+/** a raw DevTools protocol call */
+export async function cdp(method, params = {}) {
+  await connect();
+  return send(method, params);
+}
+
+/**
+ * Two fingers through the DevTools protocol (adb "input" can only move one): from `start` apart to `end`
+ * apart around (x, y), optionally moving the centre by (dx, dy). CSS client coordinates. They go through
+ * Chrome's own gesture handling, touch-action included. (Kernel events from the emulator console would make
+ * Gboard believe a stylus is in use.)
+ */
+export async function pinch(x, y, start, end, { dx = 0, dy = 0, steps = 12, wait = 16 } = {}) {
+  const points = (t) => {
+    const half = (start + (end - start) * t) / 2;
+    const cx = x + dx * t;
+    const cy = y + dy * t;
+    return [{ x: cx - half, y: cy, id: 0 }, { x: cx + half, y: cy, id: 1 }];
+  };
+  await cdp("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [points(0)[0]] });
+  await cdp("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: points(0) });
+  for (let i = 1; i <= steps; i++) {
+    await cdp("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: points(i / steps) });
+    await sleep(wait);
+  }
+  await cdp("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+}
+
+/** one finger along a path of CSS client points, through the DevTools protocol (smooth, many samples) */
+export async function stroke(path, { wait = 16 } = {}) {
+  await cdp("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ ...path[0], id: 0 }] });
+  for (const point of path.slice(1)) {
+    await cdp("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ ...point, id: 0 }] });
+    await sleep(wait);
+  }
+  await cdp("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
 }
 
 export function disconnect() {
@@ -163,7 +215,16 @@ export async function swipe(x1, y1, x2, y2, ms = 300) {
 
 export const typeText = (text) => shell(`input text '${text.replace(/ /g, "%s").replace(/'/g, "")}'`);
 export const key = (code) => shell(`input keyevent ${code}`);
-export const keyboardShown = () => /mInputShown=true/.test(shell("dumpsys input_method"));
+export function keyboardShown() {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      // grep on the device: the full dump is large and adb sometimes drops it half way
+      return /mInputShown=true/.test(shell("dumpsys input_method | grep mInputShown; true"));
+    } catch (error) {
+      if (attempt >= 3) throw error;
+    }
+  }
+}
 
 /** centre of the first visible element matching the selector */
 export async function centre(selector) {

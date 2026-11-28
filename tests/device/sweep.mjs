@@ -1,6 +1,7 @@
 /**
  * Tap EVERY text box of a document with a real finger and check that exactly that box opens, with the
- * keyboard, the right text, and the text visible above the keyboard.
+ * keyboard, the right text, and the text visible above the keyboard. Each box is tried from fit width,
+ * where tiny crowded text magnifies first and takes a second tap.
  *
  *   node tests/device/sweep.mjs file.pdf [more.pdf] [--limit=40] [--where=centre|left|right|top|bottom]
  */
@@ -37,6 +38,7 @@ const target = (id) =>
     return { x: p[0], y: p[1], w: r.width, h: r.height }; })()`);
 
 let failures = 0;
+await d.reload();
 for (const file of files) {
   await d.evaluate("__pdfedit.getState().closeDoc()");
   await d.openPdf(file);
@@ -52,15 +54,25 @@ for (const file of files) {
   const chosen = lines.filter((_, i) => i % step === 0);
   console.log(`\n== ${basename(file)}: ${lines.length} boxes, testing ${chosen.length} (${where})`);
   let ok = 0;
+  let magnified = 0;
   for (const line of chosen) {
-    const point = await target(line.id);
+    await d.evaluate("__pdfedit.setState({ zoom: 'fit', toasts: [] })");
+    await d.sleep(700);
+    let point = await target(line.id);
     if (!point) {
       console.log(`  ?? box vanished: ${line.text.slice(0, 40)}`);
       continue;
     }
     await d.tap(point.x, point.y);
-    await d.sleep(1700);
-    const s = await state();
+    await d.sleep(1500);
+    let s = await state();
+    if (!s.editing && s.zoom !== "fit") {
+      magnified++;
+      point = await target(line.id);
+      await d.tap(point.x, point.y);
+    }
+    await d.sleep(1500);
+    s = await state();
     const problems = [];
     if (!s.editing) problems.push("nothing opened");
     else if (s.editing !== line.id) problems.push(`wrong box opened: "${(s.value ?? "").slice(0, 30)}"`);
@@ -78,8 +90,10 @@ for (const file of files) {
       console.log(`  FAIL #${failures} [${Math.round(point.w)}x${Math.round(point.h)}px] "${line.text.slice(0, 40)}": ${problems.join("; ")}`);
     } else ok++;
     if (s.editing) {
+      // the bar rides up with the keyboard: tap it once it has arrived
+      await d.sleep(600);
       await d.tapOn("[data-testid=editor-cancel]");
-      await d.sleep(900);
+      await d.sleep(1200);
       const after = await state();
       if (after.editing) {
         console.log(`  FAIL cancel did not close "${line.text.slice(0, 30)}"`);
@@ -89,7 +103,7 @@ for (const file of files) {
       }
     }
   }
-  console.log(`  ${ok}/${chosen.length} boxes fine`);
+  console.log(`  ${ok}/${chosen.length} boxes fine (${magnified} magnified first)`);
 }
 console.log(`\n${failures} failures. page errors: ${JSON.stringify(d.errors.slice(0, 5))}`);
 d.disconnect();

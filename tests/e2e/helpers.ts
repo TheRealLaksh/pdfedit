@@ -222,14 +222,35 @@ export async function drag(page: Page, id: string, from: [number, number], to: [
 
 export const editor = (page: Page) => page.getByRole("textbox", { name: "Edit text" });
 
+/**
+ * A tap on a line. On a phone, tiny crowded text magnifies first (nothing opens, the page grows) and the
+ * second tap, on the same spot of the page, opens the line.
+ */
+export async function tapLine(page: Page, id: string, x: number, y: number, index = 0) {
+  const zoom = () => page.evaluate(() => (window as unknown as { __pdfedit: { getState(): { zoom: unknown } } }).__pdfedit.getState().zoom);
+  const before = await zoom();
+  await tapPage(page, id, x, y, index);
+  if (!isPhone(page)) return;
+  await expect.poll(async () => !!(await state(page)).editing || (await zoom()) !== before, { message: "the tap did nothing" }).toBe(true);
+  if ((await state(page)).editing) return;
+  // a double tap is deliberately one tap: wait it out
+  await page.waitForTimeout(500);
+  await tapPage(page, id, x, y, index);
+}
+
 export async function openLine(page: Page, id: string, lineIndex: number, index = 0) {
   const line = fixture(id).pages[index]!.lines[lineIndex]!;
   await showPage(page, index);
   await expect(pageElement(page, index).locator("[data-line-id]").first()).toBeAttached({ timeout: 30_000 });
   const [x0, y0, x1, y1] = line.rect;
-  await tapPage(page, id, (x0 + x1) / 2, (y0 + y1) / 2, index);
+  await tapLine(page, id, (x0 + x1) / 2, (y0 + y1) / 2, index);
   await expect(editor(page)).toBeVisible();
   return line;
+}
+
+/** the less common controls: on phones they sit behind a button of the style bar */
+export async function styleControls(page: Page, group: "Font and size" | "Colour" | "More options") {
+  if (isPhone(page)) await page.getByRole("button", { name: group, exact: true }).click();
 }
 
 export const done = (page: Page) => page.getByRole("button", { name: "Done", exact: true }).and(page.getByTestId("editor-done"));
