@@ -1,7 +1,7 @@
 /** The headline feature: tap existing text, change it, download. */
 import {
-  changed, compare, done, download, editLine, editor, expect, fixture, grow, history, idle, isPhone, open, openLine, readPdf,
-  redoButton, revision, state, styleControls, tapLine, tapPage, test, toolbar, undoButton,
+  changed, compare, done, download, editLine, editor, expect, fixture, grow, history, idle, isPhone, open, openLine, readPdf, redoButton, revision, state, styleControls, tapLine, tapPage, test, toolbar, undoButton,
+chooseTool,
 } from "./helpers";
 
 test("tap a line, retype it, download", async ({ page }) => {
@@ -124,6 +124,8 @@ test("style bar changes weight and the line can be deleted", async ({ page }) =>
   await open(page, "en-truetype");
   await openLine(page, "en-truetype", 1);
   let before = await revision(page);
+  // an existing line's first row steps between lines on phones: weight sits with the font
+  await styleControls(page, "Font and size");
   await page.getByRole("button", { name: /^Bold/ }).click();
   await done(page).click();
   await changed(page, before);
@@ -219,4 +221,120 @@ test("warns before throwing unsaved changes away", async ({ page }) => {
   await page.getByRole("button", { name: "Close document" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Discard changes" }).click();
   await expect(page.getByRole("button", { name: "Choose file" })).toBeVisible();
+});
+
+test("the typing preview is drawn with a loaded font", async ({ page }) => {
+  await open(page, "en-truetype");
+  await openLine(page, "en-truetype", 7);
+  // the document's own font, or the file the engine would draw with instead
+  await expect.poll(() => editor(page).evaluate((el) => getComputedStyle(el).fontFamily)).toContain("pe-font-");
+});
+
+test("steps to the next and previous line, saving on the way", async ({ page }) => {
+  await open(page, "en-truetype");
+  const lines = fixture("en-truetype").pages[0]!.lines;
+  await openLine(page, "en-truetype", 1);
+  await page.getByRole("button", { name: "Next line", exact: true }).click();
+  await expect(editor(page)).toHaveValue(lines[2]!.text);
+  await expect(editor(page)).toBeFocused();
+  const before = await revision(page);
+  await editor(page).fill("Two herons, not three.");
+  await page.getByRole("button", { name: "Next line", exact: true }).click();
+  await changed(page, before);
+  await expect(editor(page)).toHaveValue(lines[3]!.text);
+  await page.getByRole("button", { name: "Previous line", exact: true }).click();
+  await expect(editor(page)).toHaveValue("Two herons, not three.");
+});
+
+test("warns while the text grows too long and fits it at one tap", async ({ page }) => {
+  await open(page, "en-truetype");
+  await openLine(page, "en-truetype", 1);
+  await expect(page.getByTestId("fit-chip")).toHaveCount(0);
+  await editor(page).fill("Water level rose by 42 centimetres after the long night of steady rain over the whole valley and the hills");
+  const chip = page.getByTestId("fit-chip");
+  await expect(chip).toContainText(/Runs|Longer/);
+  await chip.getByRole("button", { name: "Fit", exact: true }).click();
+  await expect(chip.getByRole("button", { name: "Fit", exact: true })).toHaveCount(0);
+  await expect(editor(page)).toBeVisible();
+});
+
+test("searches the fonts, previews them and applies one", async ({ page }) => {
+  await open(page, "en-truetype");
+  await openLine(page, "en-truetype", 1);
+  await styleControls(page, "Font and size");
+  await page.getByRole("button", { name: "Font", exact: true }).click();
+  const picker = page.getByRole("dialog", { name: "Choose font" });
+  await expect(picker).toContainText("pt");
+  await picker.getByRole("button", { name: "Copy style" }).click();
+  await picker.getByRole("searchbox", { name: "Search fonts" }).fill("lora");
+  const option = picker.getByRole("option", { name: "Lora" });
+  await expect(option.locator(".pv-font-sample[data-loaded]")).toBeAttached({ timeout: 30_000 });
+  await option.click();
+  await expect(picker).toBeHidden();
+  await expect(editor(page)).toBeFocused();
+  await expect(page.getByRole("button", { name: "Font", exact: true })).toHaveText("Lora");
+  const before = await revision(page);
+  await done(page).click();
+  await changed(page, before);
+});
+
+test("keyboard editing returns the focus to the line", async ({ page }) => {
+  test.skip(isPhone(page), "desktop keyboard behaviour");
+  await open(page, "en-truetype");
+  const line = fixture("en-truetype").pages[0]!.lines[2]!;
+  const button = page.getByRole("button", { name: `Edit: ${line.text}`, exact: true });
+  await button.focus();
+  // the focus ring lies on the line itself
+  const box = (await button.boundingBox())!;
+  const outline = (await page.locator("[data-line-id]").nth(2).boundingBox())!;
+  expect(Math.abs(box.y - outline.y)).toBeLessThan(4);
+  await button.press("Enter");
+  await expect(editor(page)).toBeFocused();
+  await editor(page).press("Escape");
+  await expect(button).toBeFocused();
+  await button.press("Enter");
+  await editor(page).fill("Three egrets rested near the weir.");
+  await editor(page).press("Enter");
+  await expect(page.getByRole("button", { name: "Edit: Three egrets rested near the weir.", exact: true })).toBeFocused();
+});
+
+test("keys scroll a fresh document, and Escape returns to editing text", async ({ page }) => {
+  test.skip(isPhone(page), "desktop keyboard behaviour");
+  await open(page, "multipage");
+  const top = () => page.locator(".pv-scroll").evaluate((el) => el.scrollTop);
+  await page.keyboard.press("PageDown");
+  await expect.poll(top).toBeGreaterThan(100);
+  await page.keyboard.press("Home");
+  await expect.poll(top).toBeLessThan(5);
+  await chooseTool(page, "Rectangle");
+  await page.locator(".pv-scroll").focus();
+  await page.keyboard.press("Escape");
+  await expect.poll(async () => (await state(page)).tool).toBe("edit-text");
+});
+
+test("a line that cannot be edited offers to be covered and retyped", async ({ page }) => {
+  await open(page, "broken-pua");
+  const line = fixture("broken-pua").pages[0]!.lines[0]!;
+  await expect(page.locator(".pv-linebox-locked").first()).toBeAttached({ timeout: 30_000 });
+  // the offer to read the whole page lies over the first lines of a phone: put it away
+  await page.getByTestId("ocr-prompt").getByRole("button", { name: "Dismiss" }).click();
+  const bar = page.getByTestId("locked-bar");
+  // on a phone small print magnifies first and takes a second tap
+  await expect(async () => {
+    if (!(await bar.isVisible()))
+      await tapPage(page, "broken-pua", (line.rect[0] + line.rect[2]) / 2, (line.rect[1] + line.rect[3]) / 2);
+    await expect(bar).toBeVisible({ timeout: 2000 });
+  }).toPass();
+  await expect(bar).toContainText("cannot be edited directly");
+  await expect(bar.getByRole("button", { name: "Read this page" })).toBeVisible();
+  const first = await revision(page);
+  await bar.getByRole("button", { name: "Cover and retype" }).click();
+  await changed(page, first);
+  const field = page.getByRole("textbox", { name: "Text", exact: true });
+  await expect(field).toBeFocused();
+  const covered = await revision(page);
+  await field.fill("Typed again by hand");
+  await done(page).click();
+  await changed(page, covered);
+  expect(readPdf((await download(page)).bytes).text(0)).toContain("Typed again by hand");
 });

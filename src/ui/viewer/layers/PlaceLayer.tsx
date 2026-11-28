@@ -2,10 +2,11 @@
 import { useState, type MouseEvent } from "react";
 import type { NewPageObject, Point, Rect } from "../../../engine/types";
 import { useStore, type Placement } from "../../../store";
+import { focusViewer, placeMark, rememberPicture, viewCentre } from "../actions";
 import { addTextAt, editors, editTextObject, isEcho, isReady, whenReady } from "../editor/controller";
 import { hitObject, rgbToHex, smoothPath } from "../geometry";
 import { peekPageData, usePageData } from "../pageData";
-import { addGhost, removeGhost, type NewGhost } from "../viewerStore";
+import { addGhost, removeGhost, useViewer, type NewGhost } from "../viewerStore";
 import { pagePoint } from "./pointer";
 
 export function AddTextLayer({ page, width, height, scale }: { page: number; width: number; height: number; scale: number }) {
@@ -16,10 +17,22 @@ export function AddTextLayer({ page, width, height, scale }: { page: number; wid
       className="pv-layer pv-text-tool"
       data-testid="add-text-layer"
       onMouseDown={(e) => useStore.getState().editing && e.preventDefault()}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        const at = pagePoint(e, e.currentTarget, width, height);
+        editors.current?.commit();
+        useViewer.setState({ menu: { x: e.clientX, y: e.clientY, page, at, target: { kind: "page" } } });
+      }}
       onClick={(e) => {
         if (isEcho(e)) return;
         const at = pagePoint(e, e.currentTarget, width, height);
         const tap = { clientX: e.clientX, clientY: e.clientY };
+        const { mark } = useViewer.getState();
+        // marks are put down where tapped, one after another
+        if (mark !== "text") {
+          editors.current?.commit();
+          return void placeMark(page, at, mark);
+        }
         const answer = () => {
           const existing = [...(peekPageData("objects", page) ?? [])]
             .reverse()
@@ -82,11 +95,22 @@ function drop(placement: NonNullable<Placement>, page: number, rect: Rect) {
   store.setPlacement(null);
   // the new object stays selected so it can be adjusted at once
   store.setTool("select");
+  focusViewer();
   void useStore.getState().addObject(object).then((result) => {
     if (!result) return removeGhost(id);
+    if (result.createdId && object.kind === "image") rememberPicture(result.createdId, object.data);
     const now = useStore.getState();
     if (result.createdId && now.tool === "select") now.select({ type: "object", page, id: result.createdId });
   });
+}
+
+/** without pointing: the waiting image or signature goes to the middle of what is on screen */
+export function placeInMiddle() {
+  const { placement, doc, tool } = useStore.getState();
+  const spot = viewCentre();
+  const info = spot && doc?.pages[spot.page];
+  if (!placement || !spot || !info) return;
+  drop(placement, spot.page, placementRect(placement, spot.at, info.width, info.height, tool === "signature"));
 }
 
 export function PlaceLayer({ page, width, height, scale }: { page: number; width: number; height: number; scale: number }) {

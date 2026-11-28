@@ -3,13 +3,14 @@
  * keyboard open while one field replaces another (iOS only opens it from inside a tap).
  */
 import { flushSync } from "react-dom";
-import type { Point, TextLine } from "../../../engine/types";
+import type { FontChoice, Point, TextLine, TextStyle } from "../../../engine/types";
 import { useStore } from "../../../store";
 import { isCompact, isIOS } from "../device";
-import { ambiguousTap, lineFrame, MAX_SCALE, meansOpenLine, nearestLine, toLocal } from "../geometry";
+import { ambiguousTap, lineFrame, MAX_SCALE, meansOpenLine, nearestLine, readingOrder, rectCentre, toLocal } from "../geometry";
 import { loadPageData, peekPageData, type PageDataKind } from "../pageData";
 import { zoomAt } from "../viewerApi";
 import { flushInk, showHint, useViewer } from "../viewerStore";
+import { fontName } from "./fontName";
 
 export interface ActiveEditor {
   key: string;
@@ -22,9 +23,15 @@ export interface ActiveEditor {
   reaches(clientX: number, clientY: number): boolean;
 }
 
-export const editors: { current: ActiveEditor | null; caret: { key: string; u: number } | null } = {
+export const editors: {
+  current: ActiveEditor | null;
+  caret: { key: string; u: number } | null;
+  /** the line being opened was chosen from the keyboard: the focus returns to it afterwards */
+  keyboard: boolean;
+} = {
   current: null,
   caret: null,
+  keyboard: false,
 };
 
 let keeper: HTMLTextAreaElement | null = null;
@@ -123,7 +130,10 @@ export function isEcho(tap: Tap): boolean {
   return performance.now() - acted.at < 450 && Math.hypot(tap.clientX - acted.x, tap.clientY - acted.y) < 40;
 }
 
-const actedOn = (tap: Tap) => (acted = { at: performance.now(), x: tap.clientX, y: tap.clientY });
+const actedOn = (tap: Tap) => {
+  editors.keyboard = false;
+  acted = { at: performance.now(), x: tap.clientX, y: tap.clientY };
+};
 
 /** the user closed the field on purpose (button or key): the next tap is a new one, however soon */
 export function forgetTap() {
@@ -225,6 +235,7 @@ function open(page: number, lineId: string, u: number | null) {
   queued++;
   switched();
   showHint(null);
+  useViewer.setState({ locked: null, field: null, menu: null, refocus: null });
   const session = useStore.getState().session;
   editors.caret = u === null ? null : { key: editKey(session, page, lineId), u };
   // synchronous so that focus() still counts as part of the tap
@@ -248,8 +259,9 @@ export function editLineAt(page: number, line: TextLine, at: Point | null, scale
     return;
   }
   if (!line.editable) {
+    // not a dead end: a bar offers the ways forward
     releaseKeyboard();
-    useStore.getState().toast(line.note || "This text cannot be edited.", "warning");
+    useViewer.setState({ locked: { page: line.page, line } });
     return;
   }
   open(page, line.id, at ? toLocal(lineFrame(line), at)[0] : null);
@@ -264,20 +276,115 @@ export function editLineWhenReady(page: number, at: Point, scale: number, touch:
   whenReady(page, ["text"], answer, keyboard);
 }
 
+/* ---------- giving one line the look of another ---------- */
+
+/** the changes that make text written as `target` look like `copied` */
+export function pastedStyle(copied: TextStyle, target: TextStyle, fonts: FontChoice[]): Partial<TextStyle> {
+  const patch: Partial<TextStyle> = {
+    size: copied.size,
+    color: copied.color,
+    bold: copied.bold,
+    italic: copied.italic,
+    underline: !!copied.underline,
+  };
+  if ((copied.letterSpacing ?? 0) !== (target.letterSpacing ?? 0)) patch.letterSpacing = copied.letterSpacing ?? 0;
+  if (copied.fontChoice) patch.fontChoice = copied.fontChoice;
+  else if (fontName(copied.family) !== fontName(target.family)) {
+    const same = fonts.find((f) => f.source === "document" && fontName(f.family) === fontName(copied.family));
+    if (same) patch.fontChoice = same.id;
+    else showHint("Size and colour pasted. That font cannot be reused here");
+  } else patch.fontChoice = undefined;
+  return patch;
+}
+
+/* ---------- stepping from line to line ---------- */
+
+/** how far on (or back) the next line is looked for past the end of a page */
+const LOOK_AHEAD = 5;
+
+/**
+ * Save the open line and open the one before or after it in reading order, on to the neighbouring pages.
+ * The keyboard stays where it is.
+ */
+export function stepLine(direction: 1 | -1) {
+  const store = useStore.getState();
+  const editing = store.editing;
+  const info = editing && store.doc?.pages[editing.page];
+  if (!editing || !info) return;
+  const page = editing.page;
+  const lines = peekPageData("text", page)?.lines ?? [];
+  const current = lines.find((l) => l.id === editing.lineId);
+  if (!current) return;
+  const order = readingOrder(lines.filter((l) => l.editable || l.id === current.id), info.width);
+  const target = order[order.findIndex((l) => l.id === current.id) + direction];
+  if (!target) return void stepPage(page, direction);
+  const spot = rectCentre(target.rect);
+  const pending = editors.current?.commit() ?? null;
+  if (!pending && !useStore.getState().busy) return open(page, target.id, null);
+  // ids change with the save: the line is found again where it sits
+  whenReady(
+    page,
+    ["text"],
+    () => {
+      const found = nearestLine(peekPageData("text", page)?.lines ?? [], spot, 1, false);
+      if (found?.editable) open(page, found.id, null);
+    },
+    true,
+  );
+}
+
+async function stepPage(from: number, direction: 1 | -1) {
+  const { session, doc } = useStore.getState();
+  const count = doc!.pageCount;
+  holdKeyboard();
+  editors.current?.commit();
+  if (isCompact()) useViewer.setState({ switching: true });
+  const mine = ++queued;
+  const wanted = () => mine === queued && useStore.getState().session === session && !useStore.getState().editing;
+  await saved();
+  for (let page = from + direction; page >= 0 && page < count && Math.abs(page - from) <= LOOK_AHEAD; page += direction) {
+    if (!wanted()) return;
+    const text = await loadPageData("text", page);
+    if (!wanted()) return;
+    const width = useStore.getState().doc!.pages[page]!.width;
+    const order = readingOrder(text.lines.filter((l) => l.editable), width);
+    const target = direction > 0 ? order[0] : order[order.length - 1];
+    if (!target) continue;
+    useStore.getState().scrollTo(page, target.rect);
+    return open(page, target.id, null);
+  }
+  switched();
+  releaseKeyboard();
+  showHint(direction > 0 ? "That was the last line" : "That was the first line");
+}
+
+/* ---------- new text ---------- */
+
 /** start writing a new text box with its first baseline near `at` */
-export function addTextAt(page: number, at: Point, tap?: Tap) {
+export function addTextAt(
+  page: number,
+  at: Point,
+  tap?: Tap,
+  /** retyping a covered line: its look and place, and what to undo when cancelled */
+  retype?: { text: string; style: TextStyle; width: number; cover: boolean },
+) {
   if (tap) actedOn(tap);
   const { doc, toolOptions } = useStore.getState();
   const info = doc?.pages[page];
   if (!info) return;
   editors.current?.commit();
-  const size = toolOptions.text.size;
-  const margin = 8;
-  const x = Math.max(margin, Math.min(at[0], info.width - 80));
-  const y = Math.max(0, Math.min(at[1] - size * 0.7, info.height - size * 1.4));
-  const width = Math.max(60, Math.min(220, info.width - margin - x));
+  const size = retype?.style.size ?? toolOptions.text.size;
+  const margin = retype ? 0 : 8;
+  const x = Math.max(margin, Math.min(at[0], info.width - (retype ? 20 : 80)));
+  const y = Math.max(0, Math.min(at[1] - size * (retype ? 0.95 : 0.7), info.height - size * 1.4));
+  const width = Math.max(60, Math.min(retype ? retype.width + size : 220, info.width - margin - x));
   const key = `new:${Date.now().toString(36)}`;
-  useViewer.setState({ draft: { key, page, rect: [x, y, x + width, y + size * 1.2] } });
+  useViewer.setState({
+    draft: {
+      key, page, rect: [x, y, x + width, y + size * 1.2],
+      text: retype?.text, style: retype?.style, cover: retype?.cover,
+    },
+  });
   open(page, key, null);
 }
 

@@ -1,7 +1,7 @@
 /** State private to the viewer: optimistic previews, unconfirmed redactions, new text boxes. */
 import { create } from "zustand";
 import { engine } from "../../engine/client";
-import type { Point, Rect, RGB } from "../../engine/types";
+import type { FormField, Point, Rect, RGB, TextLine, TextStyle } from "../../engine/types";
 import { useStore } from "../../store";
 import type { PreviewSpec } from "./editor/Preview";
 
@@ -22,6 +22,36 @@ export interface TextDraft {
   page: number;
   /** left, top, right of the new text box; height follows the content */
   rect: Rect;
+  /** typed already when the box opens (retyping a covered line) */
+  text?: string;
+  /** the look to write in, when it is not that of the Add text tool */
+  style?: TextStyle;
+  /** the old line was covered for this box: cancelling it takes the cover away again */
+  cover?: boolean;
+}
+
+/** what a tap of the Add text tool puts down: writing, or a mark for filling a form that has no fields */
+export type Mark = "text" | "tick" | "cross" | "dot" | "date" | "initials";
+
+/** a context menu: what was asked about, and where (client coordinates) */
+export interface Menu {
+  x: number;
+  y: number;
+  page: number;
+  /** page point under the menu */
+  at: Point;
+  target:
+    | { kind: "line"; line: TextLine }
+    | { kind: "object"; id: string }
+    | { kind: "image"; id: string }
+    | { kind: "page" };
+  /** opened from the keyboard: the focus goes back there afterwards */
+  from?: HTMLElement | null;
+}
+
+/** the look of a line, kept to be given to another */
+export interface StyleClip {
+  style: TextStyle;
 }
 
 export interface InkBuffer {
@@ -43,6 +73,17 @@ interface ViewerState {
   switching: boolean;
   /** a short instruction after the view moved by itself */
   hint: string | null;
+  /** a line that cannot be edited was asked for: the ways forward are offered */
+  locked: { page: number; line: TextLine } | null;
+  /** the form field being filled on the page */
+  field: FormField | null;
+  mark: Mark;
+  menu: Menu | null;
+  styleClip: StyleClip | null;
+  /** after a keyboard edit: give the focus to the line at this spot once the page is read again */
+  refocus: { page: number; at: Point } | null;
+  /** "recognise text" prompts the user has put away (session:page) */
+  dismissed: string[];
 }
 
 export const useViewer = create<ViewerState>()(() => ({
@@ -53,6 +94,13 @@ export const useViewer = create<ViewerState>()(() => ({
   bottomInset: 0,
   switching: false,
   hint: null,
+  locked: null,
+  field: null,
+  mark: "text",
+  menu: null,
+  styleClip: null,
+  refocus: null,
+  dismissed: [],
 }));
 
 let hintTimer: ReturnType<typeof setTimeout> | undefined;
@@ -90,7 +138,10 @@ export function settleGhosts(page: number, revision: number) {
 export function resetViewer() {
   clearTimeout(inkTimer);
   showHint(null);
-  useViewer.setState({ ghosts: [], redactions: {}, draft: null, ink: null, bottomInset: 0, switching: false });
+  useViewer.setState({
+    ghosts: [], redactions: {}, draft: null, ink: null, bottomInset: 0, switching: false,
+    locked: null, field: null, menu: null, refocus: null, dismissed: [],
+  });
 }
 
 /* ---------- ink: strokes drawn in quick succession become one object ---------- */

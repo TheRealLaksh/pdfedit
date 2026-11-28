@@ -287,7 +287,8 @@ export function useViewport(scroller: RefObject<HTMLDivElement | null>, content:
       if (!e.ctrlKey && !e.metaKey) return;
       e.preventDefault();
       const delta = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1);
-      wheelScale = (wheelScale || scaleAt(e.clientY)) * Math.exp(-Math.max(-60, Math.min(60, delta)) * 0.005);
+      // one notch of a mouse wheel is about 15%; a trackpad pinch sends many small steps
+      wheelScale = (wheelScale || scaleAt(e.clientY)) * Math.exp(-Math.max(-28, Math.min(28, delta)) * 0.005);
       wheelScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, wheelScale));
       wheelAt = [e.clientX, e.clientY];
       wheelFrame ||= requestAnimationFrame(() => {

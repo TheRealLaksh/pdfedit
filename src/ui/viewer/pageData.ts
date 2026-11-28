@@ -1,7 +1,7 @@
 /** Cached per page, per revision engine queries (text lines, added objects, existing images). */
 import { useEffect, useState } from "react";
 import { engine } from "../../engine/client";
-import type { ImageItem, PageObject, PageText } from "../../engine/types";
+import type { DocInfo, FormField, ImageItem, PageObject, PageText } from "../../engine/types";
 import { useStore } from "../../store";
 import { isCurrent, whenSettled } from "./documentGate";
 
@@ -9,6 +9,7 @@ interface Kinds {
   text: PageText;
   objects: PageObject[];
   images: ImageItem[];
+  fields: FormField[];
 }
 
 export type PageDataKind = keyof Kinds;
@@ -17,7 +18,22 @@ const loaders: { [K in keyof Kinds]: (page: number) => Promise<Kinds[K]> } = {
   text: (page) => engine.getPageText(page),
   objects: (page) => engine.listObjects(page),
   images: (page) => engine.listImages(page),
+  fields: (page) => loadFields().then((all) => all.filter((f) => f.page === page)),
 };
+
+/** the engine lists the fields of the whole document: asked once per state of it */
+let fields: { doc: DocInfo | null; all: Promise<FormField[]> } | null = null;
+
+export function loadFields(): Promise<FormField[]> {
+  const doc = useStore.getState().doc;
+  if (!doc?.hasForms) return Promise.resolve([]);
+  if (fields?.doc !== doc) {
+    const all = engine.listFormFields();
+    fields = { doc, all };
+    all.catch(() => (fields = null));
+  }
+  return fields.all;
+}
 
 const LIMIT = 240;
 const cache = new Map<string, Promise<unknown>>();

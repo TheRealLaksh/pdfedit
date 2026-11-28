@@ -1,23 +1,28 @@
 /** The editor for one line (or one new/added text box): owns the draft and commits only what changed. */
-import { ArrowsOutCardinalIcon, CheckIcon, XIcon } from "@phosphor-icons/react";
+import { ArrowsOutCardinalIcon, CaretDownIcon, CaretUpIcon, CheckIcon, XIcon } from "@phosphor-icons/react";
 import { useContext, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { createPortal } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { engine } from "../../../engine/client";
 import type { Align, LineEdit, PageObject, Point, Rect, TextLine, TextStyle } from "../../../engine/types";
 import { useStore } from "../../../store";
 import { ViewerContext } from "../context";
 import { useCompact } from "../device";
-import { fromLocal, lineFrame, MAX_SCALE } from "../geometry";
+import { fromLocal, lineFrame, MAX_SCALE, rectCentre, type LineFrame } from "../geometry";
 import { samplePaper } from "../canvasRegistry";
 import { loadPageData, peekPageData } from "../pageData";
 import { zoomAt } from "../viewerApi";
 import { addGhost, removeGhost, useViewer, type TextDraft } from "../viewerStore";
-import { editKey, editors, focusField, forgetTap, type ActiveEditor } from "./controller";
+import { editKey, editors, focusField, forgetTap, pastedStyle, stepLine, type ActiveEditor } from "./controller";
 import { Dock } from "./Dock";
+import { FitChip, type Overflow } from "./FitChip";
+import { usePreviewFont } from "./fontFaces";
+import { fontName } from "./fontName";
+import { FontPicker, type FontContext } from "./FontPicker";
 import { lineBox, Preview, type PreviewSpec } from "./Preview";
 import { PhoneBar } from "./PhoneBar";
-import { StyleBar, type StyleBarProps } from "./StyleBar";
-import { measureText, offsetAtX } from "./textMetrics";
+import { StyleBar, useFonts, type StyleBarProps } from "./StyleBar";
+import { measureText, offsetAtX, type PreviewStyle } from "./textMetrics";
+import { useLineFit } from "./useFit";
 
 type TextObject = Extract<PageObject, { kind: "text" }>;
 type Source =
@@ -32,7 +37,7 @@ const REF = 10;
 function findSource(page: number, lineId: string): Source | undefined {
   if (lineId.startsWith("new:")) {
     const draft = useViewer.getState().draft;
-    const text = useStore.getState().toolOptions.text;
+    const text = draft?.style ?? useStore.getState().toolOptions.text;
     return draft?.key === lineId ? { kind: "new", draft, style: text, align: "left" } : undefined;
   }
   if (lineId.startsWith("object:")) {
@@ -88,7 +93,16 @@ function initialDraft(source: Source): { draft: Draft; style: TextStyle } {
     return { draft: { ...base, text: source.line.text, align: source.line.align }, style: source.line.style };
   if (source.kind === "object")
     return { draft: { ...base, text: source.object.text, align: source.object.align }, style: source.object.style };
-  return { draft: { ...base, text: "", align: source.align }, style: source.style };
+  return { draft: { ...base, text: source.draft.text ?? "", align: source.align }, style: source.style };
+}
+
+/** the horizontal squeeze that makes the preview font run as wide as the original line */
+function fittedScale(line: TextLine, frame: LineFrame, css: string | undefined): number {
+  const style: PreviewStyle = { ...line.style, css };
+  const natural =
+    measureText(line.text, style, line.style.size * REF).width + (line.style.letterSpacing ?? 0) * REF * [...line.text].length;
+  const width = (frame.uMax - frame.uMin) * REF;
+  return line.text.trim() && natural > 1 ? Math.min(1.8, Math.max(0.55, width / natural)) : 1;
 }
 
 function changedStyle(original: TextStyle, patch: Partial<TextStyle>): Partial<TextStyle> {
@@ -125,6 +139,9 @@ function Session({ id, page, lineId, source, revision, scale }: {
   const [short, setShort] = useState(false);
   const [tiny, setTiny] = useState(false);
   const [moving, setMoving] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const [openedByKey] = useState(() => editors.keyboard);
+  const fonts = useFonts();
   /** where on the line (points along it) the finger that opened the editor was */
   const [tappedAt] = useState(() => (editors.caret?.key === id ? editors.caret.u : null));
   const field = useRef<HTMLTextAreaElement>(null);
@@ -136,18 +153,27 @@ function Session({ id, page, lineId, source, revision, scale }: {
   const original = initial.style;
   const patch = changedStyle(original, draft.patch);
   const style: TextStyle = { ...original, ...patch };
-  const fontFamily = useChoiceFamily(patch.fontChoice);
-  const shown: TextStyle = fontFamily ? { ...style, family: fontFamily } : style;
+  // the fonts the page will be saved with, loaded for the preview
+  const choice = (source.kind === "line" ? patch.fontChoice : style.fontChoice) ?? null;
+  /** weight and slant are the line's: another cut of a font is another file */
+  const own = style.bold === original.bold && style.italic === original.italic;
+  const ownLine = source.kind === "line" ? source.line.id : null;
+  const documentFace = usePreviewFont({ page, lineId: ownLine, choice: null, bold: original.bold, italic: original.italic });
+  // otherwise: the picked font, or the stand in the engine would draw with
+  const needsOther = !!choice || !ownLine || !own || documentFace === null;
+  const otherFace = usePreviewFont({
+    page, lineId: null, choice: needsOther ? (choice ?? `auto:${original.family}`) : null,
+    bold: style.bold, italic: style.italic,
+  });
+  const usesDocument = !choice && own && !!documentFace;
+  const face = needsOther ? otherFace : documentFace;
+  const picked = choice ? fonts.find((f) => f.id === choice) : undefined;
+  const shown: PreviewStyle = { ...style, family: picked?.family ?? style.family, css: face?.css };
 
   const [geometry] = useState(() => {
     if (source.kind === "line") {
       const { line } = source;
-      const frame = lineFrame(line);
-      const natural = measureText(line.text, line.style, line.style.size * REF).width +
-        (line.style.letterSpacing ?? 0) * REF * [...line.text].length;
-      const width = (frame.uMax - frame.uMin) * REF;
-      const scaleX = line.text.trim() && natural > 1 ? Math.min(1.8, Math.max(0.55, width / natural)) : 1;
-      return { frame, scaleX, cover: samplePaper(page, pageWidth, line.rect) };
+      return { frame: lineFrame(line), cover: samplePaper(page, pageWidth, line.rect) };
     }
     if (source.kind === "object") return { cover: samplePaper(page, pageWidth, source.object.rect) };
     // phones: a new box wraps within what the screen shows (at the zoom it will be typed at)
@@ -155,6 +181,9 @@ function Session({ id, page, lineId, source, revision, scale }: {
     const screen = compact ? scroller.current?.clientWidth : undefined;
     return { cover: null, maxWidth: screen ? (screen - 48) / typedAt : undefined };
   });
+  // how far the unchanged line would be from its real width in the font shown for it
+  const scaleX =
+    source.kind === "line" ? fittedScale(source.line, geometry.frame!, (documentFace ?? otherFace)?.css) : 1;
 
   /* ---------- what is drawn over the page ---------- */
 
@@ -178,7 +207,7 @@ function Session({ id, page, lineId, source, revision, scale }: {
       ? {
           kind: "line",
           frame: geometry.frame!,
-          scaleX: patch.fontChoice ? 1 : geometry.scaleX!,
+          scaleX: patch.fontChoice || !own ? 1 : scaleX,
           shrink: draft.shrink,
           bleed: source.line.source === "ocr" ? 0.18 : 0,
           text: draft.text,
@@ -244,7 +273,8 @@ function Session({ id, page, lineId, source, revision, scale }: {
     const placed: Rect = [rect[0] + draft.offset[0], rect[1] + draft.offset[1], rect[2] + draft.offset[0], rect[3] + draft.offset[1]];
     if (source.kind === "new") {
       if (blank) return null;
-      store.setToolOptions({ text: style });
+      // a retyped line keeps its own look to itself
+      if (!source.draft.style) store.setToolOptions({ text: style });
       return send(spec, () =>
         store
           .addObject({ kind: "text", page, rect: placed, text: draft.text, style, align: draft.align, lineHeight: LINE_HEIGHT })
@@ -268,14 +298,28 @@ function Session({ id, page, lineId, source, revision, scale }: {
     return pending;
   };
 
+  /** the field goes away: the focus must not drop to the top of the document */
+  const keepPlace = (byKey: boolean) => {
+    // not after the Enter of an on-screen keyboard: focus on a phone belongs to the finger
+    if ((openedByKey || (byKey && !compact)) && source.kind === "line") {
+      useViewer.setState({ refocus: { page, at: rectCentre(source.line.rect) } });
+    } else if (!compact) scroller.current?.focus({ preventScroll: true });
+  };
+
   /** Cancel and Done, from a button or a key */
-  const dismiss = () => {
+  const dismiss = (byKey = false) => {
+    if (finished.current) return;
     forgetTap();
     close();
+    // cancelling a retyped line also takes its cover away
+    if (source.kind === "new" && source.draft.cover) void useStore.getState().undo();
+    keepPlace(byKey);
   };
-  const finish = () => {
+  const finish = (byKey = false) => {
+    if (finished.current) return;
     forgetTap();
     commit();
+    keepPlace(byKey);
   };
 
   const remove = () => {
@@ -553,10 +597,13 @@ function Session({ id, page, lineId, source, revision, scale }: {
       if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
-        dismiss();
+        dismiss(true);
       } else if (e.key === "Enter" && (!multiline || e.ctrlKey || e.metaKey)) {
         e.preventDefault();
-        finish();
+        finish(true);
+      } else if (source.kind === "line" && (e.ctrlKey || e.metaKey) && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+        e.preventDefault();
+        stepLine(e.key === "ArrowUp" ? -1 : 1);
       }
     },
   };
@@ -574,14 +621,71 @@ function Session({ id, page, lineId, source, revision, scale }: {
     return () => el.removeEventListener("beforeinput", onBeforeInput);
   }, [multiline]);
 
+  const onStyle = (p: Partial<TextStyle>) => setDraft((d) => ({ ...d, patch: { ...d.patch, ...p } }));
+
+  /** newly typed letters that the document's font does not have */
+  const covered = usesDocument ? documentFace!.coverage : undefined;
+  const has = (c: string) => /\s/u.test(c) || covered!.has(c.codePointAt(0)!);
+  // a font that cannot even show the line as it was (complex scripts) says nothing about single letters
+  const lacking =
+    covered && [...initial.draft.text].every(has)
+      ? [...new Set(draft.text)].filter((c) => !has(c) && !initial.draft.text.includes(c))
+      : [];
+  const fontNote = choice
+    ? face
+      ? `Typing is shown in ${face.name}.`
+      : face === null
+        ? "A stand-in is shown while typing. The picked font is used when saved."
+        : undefined
+    : usesDocument
+      ? "Typing is shown in the font stored in this PDF." +
+        (lacking.length ? ` It lacks ${lacking.slice(0, 8).join(" ")}: a close free font draws those.` : "")
+      : source.kind === "line" && face !== undefined
+        ? `Typing is shown in ${face ? `${face.name}, a close free font` : "a stand-in"}. Unchanged letters keep their look when saved.`
+        : undefined;
+  const font: FontContext = {
+    fonts,
+    text: draft.text || initial.draft.text,
+    style,
+    defaultFont:
+      source.kind === "new" ? `Default (${fontName(original.family)})` : `Original (${original.family ? fontName(original.family) : "document font"})`,
+    note: fontNote,
+    onCopyStyle: () => useViewer.setState({ styleClip: { style } }),
+    onPasteStyle: () => {
+      const clip = useViewer.getState().styleClip;
+      if (clip) onStyle(pastedStyle(clip.style, original, fonts));
+    },
+  };
+
+  // would the longer text run into something? Measured unfitted, so that the answer stays while "fit" is on
+  const retyped = source.kind === "line" && !!draft.text.trim() &&
+    (draft.text !== initial.draft.text || Object.keys(patch).length > 0);
+  const fit = useLineFit(
+    page,
+    retyped ? { lineId: (source as Extract<Source, { kind: "line" }>).line.id, text: draft.text, style: patch, align: draft.align } : null,
+  );
+  /** how much wider than before */
+  const growth = fit ? fit.width / Math.max(1, fit.originalWidth) : 1;
+  const overflow: Overflow =
+    fit?.overflow === "collides" ? "collides" : fit?.overflow === "longer" && growth > 1.15 ? "long" : null;
+  const narrow = draft.shrink && growth > 1 / 0.65;
+  const chip = (overflow || (draft.shrink && narrow) || lacking.length > 0) && (
+    <FitChip
+      overflow={overflow}
+      fitted={draft.shrink}
+      narrow={narrow}
+      lacking={lacking}
+      onFit={(shrink) => setDraft((d) => ({ ...d, shrink }))}
+    />
+  );
+
   const controls: StyleBarProps = {
     style,
     align: draft.align,
-    defaultFont: source.kind === "new" ? `Default (${original.family})` : `Original (${original.family || "document font"})`,
-    onStyle: (p) => {
-      setDraft((d) => ({ ...d, patch: { ...d.patch, ...p } }));
-      if ("fontChoice" in p) field.current?.focus({ preventScroll: true });
-    },
+    font,
+    onPickFont: () => setPicking(true),
+    onStep: source.kind === "line" ? stepLine : undefined,
+    onStyle,
     onAlign: (align) => setDraft((d) => ({ ...d, align })),
     shrink: draft.shrink,
     onShrink: source.kind === "line" ? (shrink) => setDraft((d) => ({ ...d, shrink })) : undefined,
@@ -595,7 +699,7 @@ function Session({ id, page, lineId, source, revision, scale }: {
 
   // untouched text shows the page itself. Under a finger the caret and the selection must sit on the very
   // letters that are seen, so a stand-in font that runs differently is shown from the start.
-  const faithful = source.kind === "line" && Math.abs(geometry.scaleX! - 1) < 0.05;
+  const faithful = source.kind === "line" && (documentFace === undefined || Math.abs(scaleX - 1) < 0.05);
 
   return (
     <div className="pv-editor" data-pv-ui="">
@@ -629,52 +733,70 @@ function Session({ id, page, lineId, source, revision, scale }: {
             ensureVisible.current(false);
           }}
         >
+          {!short && !tiny && chip}
           <PhoneBar
             {...controls}
             short={short}
             tiny={tiny}
             refocus={() => field.current?.focus({ preventScroll: true })}
-            onCancel={dismiss}
-            onDone={finish}
+            onCancel={() => dismiss()}
+            onDone={() => finish()}
           />
         </Dock>
       ) : (
         root.current &&
         createPortal(
-          <div ref={bar} className="pv-floating" data-pv-ui="" data-testid="editor-bar">
-            <StyleBar {...controls} />
-            <div className="pv-floating-actions">
-              <button type="button" className="pv-btn" aria-label="Cancel" title="Cancel (Esc)" onMouseDown={(e) => e.preventDefault()} onClick={dismiss} data-testid="editor-cancel">
-                <XIcon />
-              </button>
-              <button type="button" className="pv-btn pv-btn-primary" aria-label="Done" title="Done (Enter)" onMouseDown={(e) => e.preventDefault()} onClick={finish} data-testid="editor-done">
-                <CheckIcon weight="bold" />
-              </button>
+          <div
+            ref={bar}
+            className="pv-floating"
+            data-pv-ui=""
+            data-testid="editor-bar"
+            onKeyDown={(e) => {
+              if (e.key !== "Escape") return;
+              e.preventDefault();
+              e.stopPropagation();
+              dismiss(true);
+            }}
+          >
+            <div className="pv-floating-row">
+              <StyleBar {...controls} />
+              <div className="pv-floating-actions">
+                {source.kind === "line" && (
+                  <>
+                    <button type="button" className="pv-btn" aria-label="Previous line" title="Previous line (Ctrl+Up)" onMouseDown={(e) => e.preventDefault()} onClick={() => stepLine(-1)}>
+                      <CaretUpIcon />
+                    </button>
+                    <button type="button" className="pv-btn" aria-label="Next line" title="Next line (Ctrl+Down)" onMouseDown={(e) => e.preventDefault()} onClick={() => stepLine(1)}>
+                      <CaretDownIcon />
+                    </button>
+                  </>
+                )}
+                <button type="button" className="pv-btn" aria-label="Cancel" title="Cancel (Esc)" onMouseDown={(e) => e.preventDefault()} onClick={(e) => dismiss(e.detail === 0)} data-testid="editor-cancel">
+                  <XIcon />
+                </button>
+                <button type="button" className="pv-btn pv-btn-primary" aria-label="Done" title={multiline ? "Done (Ctrl+Enter)" : "Done (Enter)"} onMouseDown={(e) => e.preventDefault()} onClick={(e) => finish(e.detail === 0)} data-testid="editor-done">
+                  <CheckIcon weight="bold" />
+                </button>
+              </div>
             </div>
+            {chip}
           </div>,
           root.current,
         )
       )}
+      {picking && (
+        <FontPicker
+          context={font}
+          onClose={(picked) => {
+            // still inside the tap, so a phone brings the keyboard back
+            flushSync(() => {
+              setPicking(false);
+              if (picked) onStyle({ fontChoice: picked.choice });
+            });
+            field.current?.focus({ preventScroll: true });
+          }}
+        />
+      )}
     </div>
   );
-}
-
-/** family name of a picked FontChoice, for the preview */
-function useChoiceFamily(choice: string | undefined): string | undefined {
-  const [found, setFound] = useState<{ id: string; family: string }>();
-  useEffect(() => {
-    if (!choice) return;
-    let live = true;
-    engine.listFonts().then(
-      (list) => {
-        const font = list.find((f) => f.id === choice);
-        if (live && font) setFound({ id: choice, family: font.family });
-      },
-      () => {},
-    );
-    return () => {
-      live = false;
-    };
-  }, [choice]);
-  return choice && found?.id === choice ? found.family : undefined;
 }

@@ -9,6 +9,7 @@ import { engine } from "../../../engine/client";
 import type { Align, FontChoice, Point, TextStyle } from "../../../engine/types";
 import { useStore } from "../../../store";
 import { hexToRgb, rgbToHex } from "../geometry";
+import { FontButton, type FontContext } from "./FontPicker";
 
 let fontCache: { session: number; list: Promise<FontChoice[]> } | null = null;
 
@@ -32,13 +33,6 @@ export function useFonts(): FontChoice[] {
   return fonts;
 }
 
-export const GROUPS: [FontChoice["source"], string][] = [
-  ["document", "In this document"],
-  ["user", "Your fonts"],
-  ["builtin", "Standard"],
-  ["web", "More fonts"],
-];
-
 export const ALIGN: [Align, string, ReactNode][] = [
   ["left", "Align left", <TextAlignLeftIcon key="l" />],
   ["center", "Align centre", <TextAlignCenterIcon key="c" />],
@@ -49,8 +43,11 @@ export const ALIGN: [Align, string, ReactNode][] = [
 export interface StyleBarProps {
   style: TextStyle;
   align: Align;
-  /** label of the "keep the document's font" entry */
-  defaultFont: string;
+  /** what the font button and the picker show */
+  font: FontContext;
+  onPickFont(): void;
+  /** only for existing lines: save and open the line before or after */
+  onStep?(direction: 1 | -1): void;
   onStyle(patch: Partial<TextStyle>): void;
   onAlign(align: Align): void;
   /** only for existing lines */
@@ -153,7 +150,6 @@ function Tool({ label, pressed, onClick, children, danger }: {
 
 export function StyleBar(props: StyleBarProps) {
   const { style, align, onStyle } = props;
-  const fonts = useFonts();
   const { moving } = props;
   const [sizeText, setSizeText] = useState<string | null>(null);
   const setSize = (size: number) => onStyle({ size: Math.round(Math.min(600, Math.max(2, size)) * 10) / 10 });
@@ -165,26 +161,7 @@ export function StyleBar(props: StyleBarProps) {
   return (
     <div className="pv-style" onMouseDown={keepFocus}>
       <div ref={strip} className="pv-tools" role="toolbar" aria-label="Text style">
-        <select
-          className="pv-select"
-          aria-label="Font"
-          value={style.fontChoice ?? ""}
-          onChange={(e) => onStyle({ fontChoice: e.target.value || undefined })}
-        >
-          <option value="">{props.defaultFont}</option>
-          {GROUPS.map(([source, label]) => {
-            const list = fonts.filter((f) => f.source === source);
-            return list.length ? (
-              <optgroup key={source} label={label}>
-                {list.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.family}
-                  </option>
-                ))}
-              </optgroup>
-            ) : null;
-          })}
-        </select>
+        <FontButton context={props.font} onOpen={props.onPickFont} />
         <div className="pv-stepper">
           <Tool label="Smaller text" onClick={() => setSize(Math.ceil(shownSize(style.size)) - 1)}>
             <MinusIcon />

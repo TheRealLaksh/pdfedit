@@ -7,6 +7,7 @@ import { useStore, type Selection } from "../../../store";
 import { ViewerContext } from "../context";
 import { useCompact } from "../device";
 import { editTextObject, isReady, whenReady } from "../editor/controller";
+import { useViewer } from "../viewerStore";
 import { hitObject, insideRect, rectCentre, rectH, rectW, resizeRect, withRect, type Handle } from "../geometry";
 import { snapshot } from "../canvasRegistry";
 import { peekPageData, usePageData } from "../pageData";
@@ -125,12 +126,40 @@ export function SelectLayer({ page, width, height, scale, interactive }: {
     return image ? { type: "image", page, id: image.id } : null;
   };
 
+  const openMenu = (x: number, y: number, at: Point, hit: Selection) => {
+    useStore.getState().select(hit);
+    useViewer.setState({
+      menu: { x, y, page, at, target: hit ? { kind: hit.type, id: hit.id } : { kind: "page" } },
+    });
+  };
+
+  /** keyboard and screen reader route to the things a finger can pick */
+  const choices: { key: string; name: string; selection: Selection }[] = interactive
+    ? [
+        ...(objects.data ?? []).map((o, i) => ({
+          key: o.id,
+          name: `${o.kind === "rect" ? "rectangle" : o.kind === "ink" ? "drawing" : o.kind} ${i + 1}`,
+          selection: { type: "object", page, id: o.id } as Selection,
+        })),
+        ...(images.data ?? []).map((image, i) => ({
+          key: image.id,
+          name: `image ${i + 1}`,
+          selection: { type: "image", page, id: image.id } as Selection,
+        })),
+      ]
+    : [];
+
   return (
     <div className="pv-select-layer">
       {interactive && (
         <div
           className="pv-layer"
           data-testid="select-layer"
+          onContextMenu={(e) => {
+            e.preventDefault();
+            const at = pagePoint(e, e.currentTarget, width, height);
+            openMenu(e.clientX, e.clientY, at, pick(at));
+          }}
           onClick={(e) => {
             const at = pagePoint(e, e.currentTarget, width, height);
             const answer = () => useStore.getState().select(pick(at));
@@ -144,6 +173,19 @@ export function SelectLayer({ page, width, height, scale, interactive }: {
           }}
         />
       )}
+      {choices.map((c) => (
+        <button
+          key={c.key}
+          type="button"
+          className="pv-skip"
+          onClick={() => {
+            useStore.getState().select(c.selection);
+            document.querySelector<HTMLElement>(".pv-scroll")?.focus({ preventScroll: true });
+          }}
+        >
+          Select {c.name} on page {page + 1}
+        </button>
+      ))}
       {item && selection && !editing && (
         <Frame
           key={selection.id}
@@ -223,9 +265,12 @@ function Frame({ page, item, width, height, scale, fresh }: {
       };
       const d = delta[e.key];
       if (!d || e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
-      if ((e.target as Element).closest?.("input, textarea, select, [contenteditable], [role=dialog]")) return;
+      if ((e.target as Element).closest?.("input, textarea, select, [contenteditable], [role=dialog], [role=menu]")) return;
       e.preventDefault();
-      const next = translate(latest.current.geometry, d[0], d[1]);
+      keep(translate(latest.current.geometry, d[0], d[1]));
+    };
+    /** show a step at once and save when the steps stop */
+    const keep = (next: Geometry) => {
       latest.current.geometry = next;
       setOverride({ geometry: next, revision: latest.current.revision, picture: null });
       clearTimeout(nudge.current.timer);
@@ -236,9 +281,24 @@ function Frame({ page, item, width, height, scale, fresh }: {
       };
       nudge.current.timer = setTimeout(() => nudge.current.run?.(), 400);
     };
+    // the buttons of the selection bar: the same steps, one tap each
+    const onAdjust = (e: Event) => {
+      const { dx, dy, grow, turn } = (e as CustomEvent<{ dx: number; dy: number; grow: number; turn: number }>).detail;
+      let next = translate(latest.current.geometry, dx, dy);
+      if (grow !== 1) {
+        const [cx, cy] = rectCentre(next.rect);
+        const scaled = ([x, y]: Point): Point => [cx + (x - cx) * grow, cy + (y - cy) * grow];
+        const [a, b] = [scaled([next.rect[0], next.rect[1]]), scaled([next.rect[2], next.rect[3]])];
+        next = { ...next, rect: [a[0], a[1], b[0], b[1]], from: next.from && scaled(next.from), to: next.to && scaled(next.to) };
+      }
+      if (turn) next = { ...next, rotation: (next.rotation + turn) % 360 };
+      keep(next);
+    };
     window.addEventListener("keydown", onKey);
+    window.addEventListener("pv-adjust", onAdjust);
     return () => {
       window.removeEventListener("keydown", onKey);
+      window.removeEventListener("pv-adjust", onAdjust);
       nudge.current.run?.();
     };
   }, []);
@@ -330,8 +390,9 @@ function Frame({ page, item, width, height, scale, fresh }: {
       key={grip}
       className={`pv-handle ${extra}`}
       style={{ left, top, cursor }}
-      role="button"
-      aria-label={label}
+      // pointer only: keys and the selection bar move and size without dragging
+      aria-hidden="true"
+      title={label}
       data-handle={grip}
       onPointerDown={down(grip)}
       {...events}
@@ -381,8 +442,8 @@ function Frame({ page, item, width, height, scale, fresh }: {
           {item.type === "object" && (
             <div
               className="pv-handle pv-handle-rotate"
-              role="button"
-              aria-label="Rotate"
+              aria-hidden="true"
+              title="Rotate"
               data-handle="rotate"
               onPointerDown={down("rotate")}
               {...events}

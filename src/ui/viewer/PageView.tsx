@@ -5,6 +5,7 @@ import { TextEditor } from "./editor/TextEditor";
 import type { PageBox } from "./geometry";
 import { DRAW_TOOLS, DrawLayer } from "./layers/DrawLayer";
 import { EditTextLayer } from "./layers/EditTextLayer";
+import { FormLayer } from "./layers/FormLayer";
 import { AddTextLayer, PlaceLayer } from "./layers/PlaceLayer";
 import { RedactionLayer } from "./layers/RedactionLayer";
 import { SelectLayer } from "./layers/SelectLayer";
@@ -21,6 +22,7 @@ export const PageView = memo(function PageView({ index, left, top, width, height
   const placing = useStore((s) => !!s.placement);
   const editing = useStore((s) => (s.editing?.page === index ? s.editing.lineId : null));
   const selected = useStore((s) => s.selection?.page === index);
+  const forms = useStore((s) => !!s.doc?.hasForms);
   if (!info) return null;
   const size = { page: index, width: info.width, height: info.height, scale };
 
@@ -43,6 +45,7 @@ export const PageView = memo(function PageView({ index, left, top, width, height
             {tool === "add-text" && <AddTextLayer {...size} />}
             {DRAW_TOOLS.includes(tool) && <DrawLayer {...size} tool={tool} />}
             {(tool === "select" || selected) && <SelectLayer {...size} interactive={tool === "select"} />}
+            {forms && (tool === "edit-text" || tool === "select") && <FormLayer {...size} />}
           </>
         )}
         <RedactionLayer page={index} scale={scale} />

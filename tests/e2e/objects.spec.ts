@@ -2,8 +2,7 @@
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import {
-  ASSETS, changed, chooseFiles, chooseTool, compare, done, download, drag, expect, fixture, grow, history, idle,
-  isPhone, open, openPanel, pointOnPage, readPdf, revision, state, tap, tapPage, test, toolbar,
+  ASSETS, changed, chooseFiles, chooseTool, compare, done, download, drag, editor, expect, fixture, grow, history, idle, isPhone, open, openPanel, pointOnPage, readPdf, revision, state, tap, tapPage, test, toolbar,
 } from "./helpers";
 
 const ID = "en-truetype";
@@ -146,4 +145,101 @@ test("adds a watermark and page numbers", async ({ page }) => {
   await page.getByRole("button", { name: "Close panel" }).click();
   const pdf = readPdf((await download(page)).bytes);
   for (let i = 0; i < 5; i++) expect(pdf.text(i)).toContain("CONFIDENTIAL");
+});
+
+test("fills a form on the page", async ({ page }) => {
+  await open(page, "forms");
+  await page.getByRole("button", { name: "Fill full_name", exact: true }).click();
+  const input = page.getByTestId("field-input");
+  await expect(input).toBeFocused();
+  await input.fill("Asha Verma");
+  const before = await revision(page);
+  await page.getByRole("button", { name: "Next field", exact: true }).click();
+  await changed(page, before);
+  await expect(page.getByTestId("field-input")).toHaveAttribute("aria-label", /about/i);
+  await page.getByTestId("field-input").fill("Likes rivers");
+  const second = await revision(page);
+  await page.getByTestId("field-done").click();
+  await changed(page, second);
+  await expect(page.getByTestId("field-bar")).toBeHidden();
+  const box = page.getByRole("checkbox", { name: "newsletter" });
+  await expect(box).toHaveAttribute("aria-checked", "false");
+  const third = await revision(page);
+  await box.click();
+  await changed(page, third);
+  await expect(box).toHaveAttribute("aria-checked", "true");
+  const values = readPdf((await download(page)).bytes)
+    .pdf.loadPage(0)
+    .getWidgets()
+    .map((w) => w.getValue());
+  expect(values).toContain("Asha Verma");
+  expect(values).toContain("Likes rivers");
+});
+
+test("puts ticks and a date on a flat form", async ({ page }) => {
+  await open(page, "en-truetype");
+  await chooseTool(page, "Add text");
+  const marks = page.getByTestId("marks-bar");
+  await marks.getByRole("button", { name: "Tick" }).click();
+  for (const y of [420, 450]) {
+    const before = await revision(page);
+    await tapPage(page, "en-truetype", 80, y);
+    await changed(page, before);
+  }
+  await expect(editor(page)).toHaveCount(0);
+  await marks.getByRole("button", { name: "Date" }).click();
+  const before = await revision(page);
+  await tapPage(page, "en-truetype", 80, 500);
+  await changed(page, before);
+  expect((await state(page)).tool).toBe("add-text");
+  expect(readPdf((await download(page)).bytes).text(0)).toMatch(/\d\d\D\d\d\D\d{4}/);
+});
+
+test("adds, duplicates and pastes without dragging", async ({ page }) => {
+  test.skip(isPhone(page), "desktop keyboard behaviour");
+  await open(page, "en-truetype");
+  await chooseTool(page, "Rectangle");
+  let before = await revision(page);
+  await page.getByRole("button", { name: "Add a rectangle in the middle of the view" }).press("Enter");
+  await changed(page, before);
+  await expect(page.getByTestId("selection-frame")).toBeVisible();
+  before = await revision(page);
+  await page.keyboard.press("Control+d");
+  await changed(page, before);
+  await expect(page.getByTestId("selection-frame")).toBeVisible();
+  await page.keyboard.press("Control+c");
+  before = await revision(page);
+  await page.keyboard.press("Control+v");
+  await changed(page, before);
+  const frame = page.getByTestId("selection-frame");
+  const start = (await frame.boundingBox())!;
+  await page.getByRole("button", { name: "Move and resize" }).click();
+  before = await revision(page);
+  await page.getByRole("button", { name: "Move right", exact: true }).click();
+  await page.getByRole("button", { name: "Larger", exact: true }).click();
+  await changed(page, before);
+  await expect.poll(async () => (await frame.boundingBox())!.width).toBeGreaterThan(start.width + 5);
+  await expect.poll(() => page.getByRole("button", { name: /^Select rectangle/ }).count()).toBe(3);
+});
+
+test("right click offers what can be done there", async ({ page }) => {
+  test.skip(isPhone(page), "mouse behaviour");
+  await open(page, "en-truetype");
+  const line = fixture("en-truetype").pages[0]!.lines[2]!;
+  const at = await pointOnPage(page, "en-truetype", 0, (line.rect[0] + line.rect[2]) / 2, (line.rect[1] + line.rect[3]) / 2);
+  await expect(page.locator("[data-line-id]").first()).toBeAttached();
+  await page.mouse.click(at.x, at.y, { button: "right" });
+  const menu = page.getByRole("menu");
+  await expect(menu.getByRole("menuitem", { name: "Edit text" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
+  await page.mouse.click(at.x, at.y, { button: "right" });
+  await menu.getByRole("menuitem", { name: "Font details" }).click();
+  await expect(page.getByRole("dialog", { name: "Choose font" })).toContainText("pt");
+  await page.keyboard.press("Escape");
+  await page.mouse.click(at.x, at.y, { button: "right" });
+  const before = await revision(page);
+  await menu.getByRole("menuitem", { name: "Delete line" }).click();
+  await changed(page, before);
+  expect(readPdf((await download(page)).bytes).text(0)).not.toContain("herons");
 });

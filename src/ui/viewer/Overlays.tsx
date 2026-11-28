@@ -1,16 +1,23 @@
 /** Floating prompts and contextual action bars over the viewer. */
 import {
-  ArrowCounterClockwiseIcon, ArrowsInIcon, CheckIcon, ImageSquareIcon, PencilSimpleIcon, ScanIcon, TrashIcon, XIcon,
+  ArrowClockwiseIcon, ArrowCounterClockwiseIcon, ArrowDownIcon, ArrowLeftIcon, ArrowRightIcon, ArrowUpIcon, ArrowsInIcon,
+  ArrowsOutCardinalIcon, CalendarBlankIcon, CheckIcon, CircleIcon, CopySimpleIcon, CrosshairSimpleIcon, ImageSquareIcon,
+  MinusIcon, PencilSimpleIcon, PlusIcon, ScanIcon, TextTIcon, TrashIcon, XIcon,
 } from "@phosphor-icons/react";
 import { useEffect, useState, type ReactNode } from "react";
 import { engine } from "../../engine/client";
-import type { PageObject, PageText, RGB } from "../../engine/types";
-import { toEngineImage, useStore } from "../../store";
-import { useCompact } from "./device";
-import { editTextObject } from "./editor/controller";
+import type { PageObject, PageText, RGB, TextLine } from "../../engine/types";
+import { toEngineImage, useStore, type ToolId } from "../../store";
+import {
+  addShapeInMiddle, canCopy, coverAndRetype, duplicate, focusViewer, KEYED_TOOLS, placeMark, readInitials, viewCentre,
+  writeInitials,
+} from "./actions";
+import { useBackClose, useCompact } from "./device";
+import { addTextAt, editTextObject } from "./editor/controller";
 import { hexToRgb, rgbToHex } from "./geometry";
+import { placeInMiddle } from "./layers/PlaceLayer";
 import { usePageData } from "./pageData";
-import { flushInk, undoInkStroke, useViewer } from "./viewerStore";
+import { flushInk, undoInkStroke, useViewer, type Mark } from "./viewerStore";
 
 /* ---------- top: scanned pages ---------- */
 
@@ -21,7 +28,7 @@ const needsRecognition = (text: PageText) =>
 const MESSAGE: Partial<Record<PageText["kind"], string>> = {
   scanned: "This page is a picture. Recognise its text to edit it.",
   garbled: "The text on this page is stored in a broken way. Recognise it to edit it.",
-  mixed: "Part of this page is a picture. Recognise it to edit that text too.",
+  mixed: "Some text on this page cannot be read. Recognise the page to edit that text too.",
 };
 
 export function PageNotice() {
@@ -31,9 +38,10 @@ export function PageNotice() {
   const ocr = useStore((s) => s.ocr);
   const session = useStore((s) => s.session);
   const { data, error, retry } = usePageData("text", page, tool === "edit-text");
-  const [dismissed, setDismissed] = useState<string[]>([]);
+  const dismissed = useViewer((s) => s.dismissed);
+  const locked = useViewer((s) => !!s.locked);
   const key = `${session}:${page}`;
-  if (tool !== "edit-text" || editing) return null;
+  if (tool !== "edit-text" || editing || locked) return null;
 
   // progress and the stop button are the shell's status chip
   if (ocr.running) return null;
@@ -54,7 +62,15 @@ export function PageNotice() {
       <button type="button" className="pv-btn pv-btn-primary pv-btn-text" onClick={() => void useStore.getState().runOcr([page])}>
         Recognise text on this page
       </button>
-      <button type="button" className="pv-btn pv-notice-close" aria-label="Dismiss" onClick={() => setDismissed((d) => [...d, key])}>
+      <button
+        type="button"
+        className="pv-btn pv-notice-close"
+        aria-label="Dismiss"
+        onClick={() => {
+          useViewer.setState((s) => ({ dismissed: [...s.dismissed, key] }));
+          focusViewer();
+        }}
+      >
         <XIcon />
       </button>
     </div>
@@ -141,9 +157,30 @@ function SelectionBar() {
     }
   };
 
+  const [adjusting, setAdjusting] = useState(false);
+  /** one tap per step: the selection frame gathers the steps and saves them together */
+  const adjust = (dx: number, dy: number, grow = 1, turn = 0) =>
+    window.dispatchEvent(new CustomEvent("pv-adjust", { detail: { dx, dy, grow, turn } }));
+  const step = (label: string, icon: ReactNode, run: () => void) => (
+    <button type="button" className="pv-btn" aria-label={label} title={label} onClick={run}>
+      {icon}
+    </button>
+  );
+
   // within thumb reach: the shell puts its tool options away while something is selected
   return (
     <Bar label="Selected item" bottom>
+      {adjusting && (
+        <div className="pv-adjust" role="group" aria-label="Move and resize">
+          {step("Move left", <ArrowLeftIcon />, () => adjust(-4, 0))}
+          {step("Move up", <ArrowUpIcon />, () => adjust(0, -4))}
+          {step("Move down", <ArrowDownIcon />, () => adjust(0, 4))}
+          {step("Move right", <ArrowRightIcon />, () => adjust(4, 0))}
+          {step("Smaller", <MinusIcon />, () => adjust(0, 0, 1 / 1.12))}
+          {step("Larger", <PlusIcon />, () => adjust(0, 0, 1.12))}
+          {selection.type === "object" && step("Turn", <ArrowClockwiseIcon />, () => adjust(0, 0, 1, 15))}
+        </div>
+      )}
       {object?.kind === "text" && (
         <button type="button" className="pv-btn pv-btn-text" onClick={() => editTextObject(selection.page, object.id)}>
           <PencilSimpleIcon /> Edit
@@ -184,10 +221,28 @@ function SelectionBar() {
       )}
       <button
         type="button"
+        className="pv-btn"
+        aria-label="Move and resize"
+        title="Move and resize (arrow keys move)"
+        aria-expanded={adjusting}
+        onClick={() => setAdjusting((open) => !open)}
+      >
+        <ArrowsOutCardinalIcon />
+      </button>
+      {object && canCopy(object) && (
+        <button type="button" className="pv-btn" aria-label="Duplicate" title="Duplicate (Ctrl+D)" onClick={() => void duplicate(object)}>
+          <CopySimpleIcon />
+        </button>
+      )}
+      <button
+        type="button"
         className="pv-btn pv-btn-danger"
         aria-label="Delete"
         title="Delete"
-        onClick={() => void useStore.getState().deleteSelection()}
+        onClick={() => {
+          focusViewer();
+          void useStore.getState().deleteSelection();
+        }}
       >
         <TrashIcon />
       </button>
@@ -196,11 +251,184 @@ function SelectionBar() {
         className="pv-btn"
         aria-label="Done"
         title="Deselect"
-        onClick={() => useStore.getState().select(null)}
+        onClick={() => {
+          focusViewer();
+          useStore.getState().select(null);
+        }}
       >
         <CheckIcon />
       </button>
     </Bar>
+  );
+}
+
+/* ---------- a line that cannot be edited ---------- */
+
+/** why, and what can be done instead */
+function lockedAdvice(line: TextLine, recognised: boolean) {
+  const note = line.note ?? "";
+  if (/too long/i.test(note))
+    return { text: "This line is too long to edit in place. Cover it and retype it.", read: false, cover: true, prefill: true };
+  if (/hidden|invisible|scanned/i.test(note))
+    return { text: "This text is part of a scan. Read the page to edit what you see.", read: !recognised, cover: recognised, prefill: false };
+  if (/legacy|broken|mapped|encoding/i.test(note))
+    return {
+      text: recognised
+        ? "The file stores these letters in a way that cannot be read. Cover the line and retype it."
+        : "The file stores these letters in a way that cannot be read. Read the page as a picture, or cover the line and retype it.",
+      read: !recognised, cover: true, prefill: false,
+    };
+  return { text: note || "Cover it and retype it.", read: false, cover: true, prefill: false };
+}
+
+function LockedBar() {
+  const locked = useViewer((s) => s.locked)!;
+  const revision = useStore((s) => s.doc?.pages[locked.page]?.revision);
+  const recognised = useStore((s) => s.ocr.done.includes(locked.page));
+  const reading = useStore((s) => s.ocr.running);
+  const [opened] = useState(revision);
+  const close = () => {
+    useViewer.setState({ locked: null });
+    focusViewer();
+  };
+  useBackClose(true, close);
+  // the page changed underneath: the line is not that line any more
+  useEffect(() => {
+    if (revision !== opened) useViewer.setState({ locked: null });
+  }, [revision, opened]);
+  const advice = lockedAdvice(locked.line, recognised);
+
+  return (
+    <div
+      className="pv-locked"
+      data-pv-ui=""
+      role="dialog"
+      aria-labelledby="pv-locked-title"
+      data-testid="locked-bar"
+      onKeyDown={(e) => {
+        if (e.key !== "Escape") return;
+        e.preventDefault();
+        e.stopPropagation();
+        close();
+      }}
+    >
+      <strong id="pv-locked-title">This line cannot be edited directly</strong>
+      <p>
+        {advice.text}
+        {advice.cover ? " The old text stays in the file underneath; Redact removes it." : ""}
+      </p>
+      <div className="pv-locked-actions">
+        {advice.read && !reading && (
+          <button
+            type="button"
+            className="pv-btn pv-btn-text pv-btn-primary"
+            autoFocus
+            onClick={() => {
+              close();
+              void useStore.getState().runOcr([locked.page]);
+            }}
+          >
+            Read this page
+          </button>
+        )}
+        {advice.cover && (
+          <button
+            type="button"
+            className={`pv-btn pv-btn-text ${advice.read && !reading ? "pv-btn-outline" : "pv-btn-primary"}`}
+            autoFocus={!advice.read || reading}
+            onClick={() => void coverAndRetype(locked.line, advice.prefill ? locked.line.text : "")}
+          >
+            Cover and retype
+          </button>
+        )}
+        <button type="button" className="pv-btn pv-btn-text" onClick={close}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- add text: writing, or marks for forms without fields ---------- */
+
+const MARKS: [Mark, string, ReactNode][] = [
+  ["text", "Text", <TextTIcon key="t" />],
+  ["tick", "Tick", <CheckIcon key="c" weight="bold" />],
+  ["cross", "Cross", <XIcon key="x" weight="bold" />],
+  ["dot", "Dot", <CircleIcon key="d" weight="fill" />],
+  ["date", "Date", <CalendarBlankIcon key="a" />],
+  ["initials", "Initials", <span key="i" aria-hidden className="pv-initials">AB</span>],
+];
+
+function MarksBar() {
+  const mark = useViewer((s) => s.mark);
+  const [initials, setInitials] = useState(readInitials);
+  return (
+    <div className="pv-marks" data-pv-ui="" role="toolbar" aria-label="What a tap adds" data-testid="marks-bar">
+      {MARKS.map(([value, label, icon]) => (
+        <button
+          key={value}
+          type="button"
+          className="pv-btn pv-mark"
+          aria-pressed={mark === value}
+          onClick={() => useViewer.setState({ mark: value })}
+        >
+          {icon}
+          <span>{label}</span>
+        </button>
+      ))}
+      <button
+        type="button"
+        className="pv-btn pv-mark"
+        aria-label="Add in the middle of the view"
+        title="Add in the middle of the view"
+        onClick={() => {
+          const spot = viewCentre();
+          if (!spot) return;
+          if (mark === "text") addTextAt(spot.page, spot.at);
+          else void placeMark(spot.page, spot.at, mark);
+        }}
+      >
+        <CrosshairSimpleIcon />
+        <span>Middle</span>
+      </button>
+      {mark === "initials" && (
+        <input
+          className="pv-initials-input"
+          aria-label="Your initials"
+          placeholder="Your initials"
+          maxLength={12}
+          autoComplete="off"
+          value={initials}
+          onChange={(e) => {
+            setInitials(e.target.value);
+            writeInitials(e.target.value);
+          }}
+          onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+        />
+      )}
+    </div>
+  );
+}
+
+const SHAPE_NAMES: Partial<Record<ToolId, string>> = {
+  rect: "rectangle", ellipse: "ellipse", line: "line", arrow: "arrow", whiteout: "whiteout", redact: "redaction area",
+};
+
+/** tab to it: the same shapes a finger drags, put in the middle of the view */
+function KeyedShape({ tool }: { tool: ToolId }) {
+  return (
+    <button type="button" className="pv-skip" data-pv-ui="" onClick={() => void addShapeInMiddle()}>
+      Add a {SHAPE_NAMES[tool]} in the middle of the view
+    </button>
+  );
+}
+
+function PlaceBar() {
+  return (
+    <button type="button" className="pv-fit pv-place-middle" data-pv-ui="" onClick={placeInMiddle}>
+      <CrosshairSimpleIcon aria-hidden /> Place in the middle
+    </button>
   );
 }
 
@@ -295,25 +523,49 @@ export function ActionOverlay() {
   const inking = useViewer((s) => !!s.ink);
   const notice = useViewer((s) => s.hint);
   const switching = useViewer((s) => s.switching);
+  const locked = useViewer((s) => !!s.locked);
+  const field = useViewer((s) => !!s.field);
+  const placing = useStore((s) => !!s.placement);
   if (switching) return null;
   if (editing) {
     // someone who has opened a line does not need to be told how
     hinted = true;
     return null;
   }
-  if (redacting) return <RedactionBar />;
-  if (selection) return <SelectionBar />;
-  if (inking) return <InkBar />;
-  if (notice)
+  const keyed = KEYED_TOOLS.includes(tool) ? <KeyedShape key="keyed" tool={tool} /> : null;
+  if (redacting)
     return (
-      <div className="pv-hint" role="status">
-        {notice}
-      </div>
+      <>
+        {keyed}
+        <RedactionBar />
+      </>
     );
-  return tool === "edit-text" ? (
+  if (locked && tool === "edit-text") return <LockedBar />;
+  if (placing) return <PlaceBar />;
+  const hint = notice && (
+    <div className="pv-hint" role="status">
+      {notice}
+    </div>
+  );
+  if (selection)
+    return (
+      <>
+        {hint}
+        <SelectionBar />
+      </>
+    );
+  if (inking) return <InkBar />;
+  return (
     <>
-      <Hint />
-      <FitButton />
+      {keyed}
+      {tool === "add-text" && <MarksBar />}
+      {hint}
+      {tool === "edit-text" && !hint && !field && (
+        <>
+          <Hint />
+          <FitButton />
+        </>
+      )}
     </>
-  ) : null;
+  );
 }

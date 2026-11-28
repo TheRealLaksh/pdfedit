@@ -4,8 +4,8 @@
  */
 import {
   ArrowCounterClockwiseIcon, ArrowDownIcon, ArrowLeftIcon, ArrowRightIcon, ArrowUpIcon, ArrowsInLineHorizontalIcon,
-  ArrowsOutCardinalIcon, CaretLeftIcon, CheckIcon, DotsThreeIcon, MinusIcon, PlusIcon, TextAaIcon, TextBIcon,
-  TextItalicIcon, TextUnderlineIcon, TrashIcon, XIcon,
+  ArrowsOutCardinalIcon, CaretDownIcon, CaretLeftIcon, CaretUpIcon, CheckIcon, DotsThreeIcon, MinusIcon, PlusIcon,
+  TextAaIcon, TextBIcon, TextItalicIcon, TextUnderlineIcon, TrashIcon, XIcon,
 } from "@phosphor-icons/react";
 import { useRef, useState, type MouseEvent, type ReactNode } from "react";
 import type { RGB } from "../../../engine/types";
@@ -14,7 +14,8 @@ import { useCompact } from "../device";
 import { hexToRgb, rgbToHex } from "../geometry";
 import { useViewer } from "../viewerStore";
 import { Dock } from "./Dock";
-import { ALIGN, GROUPS, shownSize, useFonts, useNudge, type StyleBarProps } from "./StyleBar";
+import { FontButton } from "./FontPicker";
+import { ALIGN, shownSize, useNudge, type StyleBarProps } from "./StyleBar";
 
 const SWATCHES: [string, string][] = [
   ["#111114", "Black"],
@@ -70,7 +71,6 @@ export function PhoneBar(props: StyleBarProps & {
 }) {
   const { style, align, onStyle, short, moving } = props;
   const [open, setOpen] = useState<Panel>(null);
-  const fonts = useFonts();
   const nudge = useNudge(props.onNudge);
   const panel = moving ? "move" : open;
   const toggle = (next: Panel) => {
@@ -127,45 +127,47 @@ export function PhoneBar(props: StyleBarProps & {
     </>
   );
 
+  const weight = (
+    <>
+      <Key label="Bold" pressed={style.bold} onClick={() => onStyle({ bold: !style.bold })}>
+        <TextBIcon />
+      </Key>
+      <Key label="Italic" pressed={style.italic} onClick={() => onStyle({ italic: !style.italic })}>
+        <TextItalicIcon />
+      </Key>
+    </>
+  );
+  /** existing lines step to their neighbours from the first row; bold and italic then live with the font */
+  const steps = !!props.onStep;
+
   let content: ReactNode = null;
-  if (panel === "size")
-    content = (
-      <div className="pv-row">
-        <select
-          className="pv-select pv-select-fill"
-          aria-label="Font"
-          value={style.fontChoice ?? ""}
-          onChange={(e) => {
-            onStyle({ fontChoice: e.target.value || undefined });
-            props.refocus();
-          }}
-        >
-          <option value="">{props.defaultFont}</option>
-          {GROUPS.map(([source, label]) => {
-            const list = fonts.filter((f) => f.source === source);
-            return list.length ? (
-              <optgroup key={source} label={label}>
-                {list.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.family}
-                  </option>
-                ))}
-              </optgroup>
-            ) : null;
-          })}
-        </select>
-        <div className="pv-stepper">
-          <Key label="Smaller text" onClick={() => setSize(Math.ceil(shownSize(style.size)) - 1)}>
-            <MinusIcon />
-          </Key>
-          <input className="pv-size" aria-label="Font size" readOnly tabIndex={-1} value={String(shownSize(style.size))} />
-          <Key label="Larger text" onClick={() => setSize(Math.floor(shownSize(style.size)) + 1)}>
-            <PlusIcon />
-          </Key>
-        </div>
+  if (panel === "size") {
+    const sizing = (
+      <div className="pv-stepper">
+        <Key label="Smaller text" onClick={() => setSize(Math.ceil(shownSize(style.size)) - 1)}>
+          <MinusIcon />
+        </Key>
+        <input className="pv-size" aria-label="Font size" readOnly tabIndex={-1} value={String(shownSize(style.size))} />
+        <Key label="Larger text" onClick={() => setSize(Math.floor(shownSize(style.size)) + 1)}>
+          <PlusIcon />
+        </Key>
       </div>
     );
-  else if (panel === "colour")
+    content = (
+      <>
+        <div className="pv-row">
+          <FontButton context={props.font} onOpen={props.onPickFont} />
+          {sizing}
+          {steps && short && weight}
+        </div>
+        {steps && !short && (
+          <div className="pv-row pv-row-even" role="group" aria-label="Weight and slant">
+            {weight}
+          </div>
+        )}
+      </>
+    );
+  } else if (panel === "colour")
     content = (
       <div className="pv-row pv-row-even">
         {SWATCHES.map(([hex, name]) => (
@@ -253,12 +255,18 @@ export function PhoneBar(props: StyleBarProps & {
       ) : (
         <div className="pv-actions" role="toolbar" aria-label="Text style">
           {cancel}
-          <Key label="Bold" pressed={style.bold} onClick={() => onStyle({ bold: !style.bold })}>
-            <TextBIcon />
-          </Key>
-          <Key label="Italic" pressed={style.italic} onClick={() => onStyle({ italic: !style.italic })}>
-            <TextItalicIcon />
-          </Key>
+          {steps ? (
+            <>
+              <Key label="Previous line" onClick={() => props.onStep!(-1)}>
+                <CaretUpIcon />
+              </Key>
+              <Key label="Next line" onClick={() => props.onStep!(1)}>
+                <CaretDownIcon />
+              </Key>
+            </>
+          ) : (
+            weight
+          )}
           <Key label="Font and size" expanded={panel === "size"} onClick={() => toggle("size")}>
             <TextAaIcon />
           </Key>

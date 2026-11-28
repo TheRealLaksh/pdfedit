@@ -11,7 +11,11 @@ const KNOWN: [RegExp, string][] = [
   [/verdana/i, "Verdana, sans-serif"],
 ];
 
-export function cssFamily(style: FontStyle): string {
+/** a style to preview: `css` is a font-family list of loaded fonts to use before the local stand-ins */
+export type PreviewStyle = TextStyle & { css?: string };
+
+export function cssFamily(style: FontStyle & { css?: string }): string {
+  if (style.css) return `${style.css}, ${cssFamily({ ...style, css: undefined })}`;
   const known = KNOWN.find(([re]) => re.test(style.family));
   if (known) return known[1];
   // "NotoSans-BoldItalic,Bold" -> "Noto Sans"

@@ -41,7 +41,7 @@ export const errors = [];
 async function connect() {
   if (socket?.readyState === 1) return;
   let page;
-  for (let attempt = 0; attempt < 20 && !page; attempt++) {
+  for (let attempt = 0; attempt < 60 && !page; attempt++) {
     try {
       const targets = await (await fetch(`http://127.0.0.1:${DEVTOOLS}/json/list`)).json();
       const open = targets.filter((t) => t.type === "page" && t.url.startsWith(URL_BASE));

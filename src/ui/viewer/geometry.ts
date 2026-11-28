@@ -228,6 +228,50 @@ export function meansOpenLine(lines: TextLine[], open: TextLine, p: Point, scale
   });
 }
 
+/**
+ * Lines in the order a reader takes them, for stepping to the previous and next one: columns of running text
+ * one after the other, blocks from the top, and tables row by row.
+ */
+export function readingOrder<T extends Pick<TextLine, "rect" | "dir">>(lines: T[], pageWidth: number): T[] {
+  if (lines.length < 2) return [...lines];
+  const middle = (values: number[]) => values.sort((a, b) => a - b)[values.length >> 1]!;
+  const height = Math.max(1, middle(lines.map((l) => l.rect[3] - l.rect[1])));
+  /** groups separated by an empty band of at least `gap` along one axis */
+  const split = (items: T[], axis: 0 | 1, gap: number) => {
+    const sorted = [...items].sort((a, b) => a.rect[axis] - b.rect[axis]);
+    const groups: T[][] = [];
+    let end = -Infinity;
+    for (const item of sorted) {
+      if (item.rect[axis] > end + gap) groups.push([]);
+      groups[groups.length - 1]!.push(item);
+      end = Math.max(end, item.rect[axis === 0 ? 2 : 3]);
+    }
+    return groups;
+  };
+  const order = (items: T[]): T[] => {
+    if (items.length < 2) return items;
+    const columns = split(items, 0, height * 0.8);
+    const running = (c: T[]) => c.length >= 4 && middle(c.map((l) => l.rect[2] - l.rect[0])) > pageWidth * 0.2;
+    if (columns.length > 1 && columns.every(running)) return columns.flatMap(order);
+    const blocks = split(items, 1, height * 0.6);
+    if (blocks.length > 1) return blocks.flatMap(order);
+    // one band: rows from the top, each read in its own direction
+    const centre = (l: T) => (l.rect[1] + l.rect[3]) / 2;
+    const sorted = [...items].sort((a, b) => centre(a) - centre(b));
+    const rows: T[][] = [];
+    for (const item of sorted) {
+      const row = rows[rows.length - 1];
+      if (row && centre(item) - centre(row[0]!) < height * 0.5) row.push(item);
+      else rows.push([item]);
+    }
+    return rows.flatMap((row) => {
+      const rtl = row.filter((l) => l.dir === "rtl").length * 2 > row.length;
+      return row.sort((a, b) => (rtl ? b.rect[0] - a.rect[0] : a.rect[0] - b.rect[0]));
+    });
+  };
+  return order(lines);
+}
+
 /* ---------- rects and added objects ---------- */
 
 export function normRect(a: Point, b: Point): Rect {

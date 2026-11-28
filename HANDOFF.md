@@ -92,12 +92,13 @@ Device testing: `C:devandroid-sdk`, AVD `pdfedit-phone`, `tests/device/` (see sc
 <!-- handoff:auto:start -->
 ## Auto: repo state
 
-_Refreshed 28 Nov 2026, 4:41 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
+_Refreshed 28 Nov 2026, 5:10 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
 
 Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `aa564f2` 2026-11-28 16:41 feat(image): edit the text inside pictures with matched fonts and rebuilt backgrounds
 - `4135e0c` 2026-11-28 16:03 feat(engine): real preview fonts, size-limited export, drafts, private image metadata stripped
 - `9e68e69` 2026-11-28 09:21 docs: build plan from the research round
 - `8b7faa1` 2026-11-28 09:20 feat: contracts for faithful typing previews, size-limited export and an image editor
@@ -112,7 +113,6 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `622a699` 2026-11-28 00:13 docs: handoff for the live release
 - `1969f44` 2026-11-28 00:02 fix(deploy): stop Cloudflare injecting scripts into the page without losing compression
 - `fa2f5dd` 2026-11-27 23:48 chore: deploy with wrangler through npx
-- `052057d` 2026-11-27 23:41 fix(text): spacing, layered and mixed-style fidelity, readable re-extraction and long lines
 
 ### Uncommitted changes at refresh time
 
@@ -123,31 +123,6 @@ M index.html
  M public/sw.js
  M public/theme.js
  M src/App.tsx
-M  src/image/ImageEditor.tsx
-A  src/image/analyze/match.ts
-A  src/image/analyze/measure.ts
-A  src/image/analyze/segment.ts
-A  src/image/client.ts
-A  src/image/compose.ts
-A  src/image/detect.ts
-A  src/image/erase.ts
-A  src/image/fonts/catalog.ts
-A  src/image/fonts/metrics.data.ts
-A  src/image/fonts/shape.ts
-A  src/image/geometry.ts
-A  src/image/image.worker.ts
-A  src/image/metadata.ts
-A  src/image/outline.ts
-A  src/image/raster.ts
-A  src/image/session.ts
-A  src/image/strings.ts
-A  src/image/types.ts
-A  src/image/ui/Panel.tsx
-A  src/image/ui/Sheets.tsx
-A  src/image/ui/Stage.tsx
-A  src/image/ui/image.css
-A  src/image/ui/picture.ts
-A  src/image/ui/useEditor.ts
  M src/main.tsx
  M src/store/index.ts
  M src/ui/shell/Dialogs.tsx
@@ -170,39 +145,39 @@ A  src/image/ui/useEditor.ts
  M src/ui/shell/uiStore.ts
  M src/ui/shell/util.ts
  M src/ui/tokens.css
- M src/ui/viewer/Overlays.tsx
- M src/ui/viewer/PageView.tsx
- M src/ui/viewer/Viewer.tsx
- M src/ui/viewer/device.ts
- M src/ui/viewer/editor/PhoneBar.tsx
- M src/ui/viewer/editor/StyleBar.tsx
- M src/ui/viewer/editor/TextEditor.tsx
- M src/ui/viewer/editor/controller.ts
- M src/ui/viewer/editor/textMetrics.ts
- M src/ui/viewer/geometry.ts
- M src/ui/viewer/layers/EditTextLayer.tsx
- M src/ui/viewer/layers/PlaceLayer.tsx
- M src/ui/viewer/layers/SelectLayer.tsx
- M src/ui/viewer/pageData.ts
- M src/ui/viewer/useViewport.ts
- M src/ui/viewer/viewer.css
- M src/ui/viewer/viewerStore.ts
- M tests/device/android.mjs
- M tests/device/phone.mjs
+A  src/ui/viewer/ContextMenu.tsx
+M  src/ui/viewer/Overlays.tsx
+M  src/ui/viewer/PageView.tsx
+M  src/ui/viewer/Viewer.tsx
+A  src/ui/viewer/actions.ts
+M  src/ui/viewer/device.ts
+A  src/ui/viewer/editor/FitChip.tsx
+A  src/ui/viewer/editor/FontPicker.tsx
+M  src/ui/viewer/editor/PhoneBar.tsx
+M  src/ui/viewer/editor/StyleBar.tsx
+M  src/ui/viewer/editor/TextEditor.tsx
+M  src/ui/viewer/editor/controller.ts
+A  src/ui/viewer/editor/fontFaces.ts
+A  src/ui/viewer/editor/fontName.ts
+M  src/ui/viewer/editor/textMetrics.ts
+A  src/ui/viewer/editor/useFit.ts
+M  src/ui/viewer/geometry.ts
+M  src/ui/viewer/layers/EditTextLayer.tsx
+A  src/ui/viewer/layers/FormLayer.tsx
+M  src/ui/viewer/layers/PlaceLayer.tsx
+M  src/ui/viewer/layers/SelectLayer.tsx
+M  src/ui/viewer/pageData.ts
+A  src/ui/viewer/useShortcuts.ts
+M  src/ui/viewer/useViewport.ts
+M  src/ui/viewer/viewer.css
+M  src/ui/viewer/viewerStore.ts
+M  tests/device/android.mjs
+M  tests/device/phone.mjs
  M tests/e2e/document.spec.ts
- M tests/e2e/edit.spec.ts
+M  tests/e2e/edit.spec.ts
  M tests/e2e/helpers.ts
-A  tests/e2e/image.spec.ts
- M tests/e2e/objects.spec.ts
+M  tests/e2e/objects.spec.ts
  M tests/e2e/ui.spec.ts
-A  tests/image/core.test.ts
-A  tests/image/helpers.ts
-A  tests/image/session.test.ts
-A  tests/image/tools/detect.test.ts
-A  tests/image/tools/gen-metrics.test.ts
-A  tests/image/tools/harness.test.ts
-A  tests/image/tools/make-scenes.mjs
-A  tests/image/tools/photos.py
 ?? public/404.html
 ?? public/fonts/
 ?? public/og.png
@@ -221,15 +196,6 @@ A  tests/image/tools/photos.py
 ?? src/ui/shell/incoming.ts
 ?? src/ui/shell/strings.ts
 ?? src/ui/shell/swipe.ts
-?? src/ui/viewer/ContextMenu.tsx
-?? src/ui/viewer/actions.ts
-?? src/ui/viewer/editor/FitChip.tsx
-?? src/ui/viewer/editor/FontPicker.tsx
-?? src/ui/viewer/editor/fontFaces.ts
-?? src/ui/viewer/editor/fontName.ts
-?? src/ui/viewer/editor/useFit.ts
-?? src/ui/viewer/layers/FormLayer.tsx
-?? src/ui/viewer/useShortcuts.ts
 ?? tests/e2e/shell.spec.ts
 ```
 <!-- handoff:auto:end -->

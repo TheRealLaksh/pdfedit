@@ -2,30 +2,21 @@
 import { useEffect, useRef } from "react";
 import { useStore } from "../../store";
 import { ViewerContext } from "./context";
+import { ContextMenu } from "./ContextMenu";
+import { isCompact } from "./device";
 import { cancelQueuedTap, editors, isEcho } from "./editor/controller";
 import { SwitchingDock } from "./editor/PhoneBar";
 import { boundsOf, quadPoints, rectCentre } from "./geometry";
 import { ActionOverlay, PageNotice } from "./Overlays";
+import { closeField } from "./layers/FormLayer";
 import { PageView } from "./PageView";
 import { clearRenderCache } from "./renderQueue";
+import { saveThen, useShortcuts } from "./useShortcuts";
 import { useViewport } from "./useViewport";
-import { zoomBy } from "./viewerApi";
-import { flushInk, resetViewer, undoInkStroke, useViewer } from "./viewerStore";
+import { flushInk, resetViewer, useViewer } from "./viewerStore";
 import "./viewer.css";
 
 export { getViewerScale, zoomBy } from "./viewerApi";
-
-/**
- * Undo or redo with a text field open: the draft is saved first, so undo takes back exactly that edit
- * (and redo can bring it back). Returns false when there was nothing to save.
- */
-function saveThen(action: "undo" | "redo"): boolean {
-  const saving = editors.current?.commit();
-  if (!saving) return false;
-  // after a new edit there is nothing left to redo
-  if (action === "undo") void saving.then((saved) => saved && useStore.getState().undo());
-  return true;
-}
 
 export function Viewer() {
   const root = useRef<HTMLDivElement>(null);
@@ -38,6 +29,7 @@ export function Viewer() {
   const tool = useStore((s) => s.tool);
   const editingPage = useStore((s) => s.editing?.page);
   const selectedPage = useStore((s) => s.selection?.page);
+  const fieldPage = useViewer((s) => s.field?.page);
   const viewport = useViewport(scroller, content);
 
   useEffect(
@@ -51,6 +43,8 @@ export function Viewer() {
   // leaving a tool finishes its unsaved work
   useEffect(() => {
     void flushInk();
+    closeField();
+    useViewer.setState({ locked: null, menu: null, mark: "text" });
     if (tool !== "redact") useViewer.setState({ redactions: {} });
   }, [tool]);
 
@@ -73,6 +67,8 @@ export function Viewer() {
       }
       cancelQueuedTap();
       editors.current?.commit();
+      closeField();
+      useViewer.setState({ locked: null });
       void flushInk();
     };
     document.addEventListener("click", onClick, true);
@@ -84,48 +80,24 @@ export function Viewer() {
     const onKey = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey) || !["s", "o", "p"].includes(e.key.toLowerCase())) return;
       editors.current?.commit();
+      closeField();
       void flushInk();
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
   }, []);
 
-  /* keyboard shortcuts */
+  useShortcuts(scroller);
+
+  // a new document: keys scroll it at once
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const store = useStore.getState();
-      if (e.defaultPrevented || !store.doc) return;
-      const target = e.target as Element;
-      const typing = !!target.closest?.("input, textarea, select, [contenteditable=true], [role=dialog]");
-      const mod = e.ctrlKey || e.metaKey;
-      const key = e.key.toLowerCase();
-      if (mod && !e.altKey && (key === "=" || key === "+" || key === "-" || key === "0")) {
-        e.preventDefault();
-        if (key === "0") store.setZoom("fit");
-        else zoomBy(key === "-" ? 1 / 1.2 : 1.2);
-        return;
-      }
-      if (typing) return;
-      if (mod && !e.altKey && key === "z" && !e.shiftKey) {
-        e.preventDefault();
-        if (!undoInkStroke() && !saveThen("undo")) void store.undo();
-      } else if (mod && !e.altKey && (key === "y" || (key === "z" && e.shiftKey))) {
-        e.preventDefault();
-        if (!saveThen("redo")) void store.redo();
-      } else if ((e.key === "Delete" || e.key === "Backspace") && store.selection && !mod) {
-        e.preventDefault();
-        void store.deleteSelection();
-      } else if (e.key === "Escape") {
-        if (store.placement) store.setPlacement(null);
-        else if (store.selection) store.select(null);
-        else if (Object.keys(useViewer.getState().redactions).length) useViewer.setState({ redactions: {} });
-        else return;
-        e.preventDefault();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+    const el = scroller.current;
+    if (!el || isCompact()) return;
+    const timer = setTimeout(() => {
+      if (document.activeElement === document.body) el.focus({ preventScroll: true });
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [session, hasDoc]);
 
   /* bring the active search hit into view */
   const hit = useStore((s) => s.search.matches[s.search.active]);
@@ -151,7 +123,7 @@ export function Viewer() {
   const mounted: number[] = [];
   for (let i = range[0]; i <= range[1] && i < layout.boxes.length; i++) mounted.push(i);
   // the page being worked on stays alive however far it is scrolled away
-  for (const page of [editingPage, selectedPage])
+  for (const page of [editingPage, selectedPage, fieldPage])
     if (page !== undefined && layout.boxes[page] && !mounted.includes(page)) mounted.push(page);
   mounted.sort((a, b) => a - b);
 
@@ -162,12 +134,15 @@ export function Viewer() {
           ref={scroller}
           className="pv-scroll"
           tabIndex={0}
+          role="region"
           aria-label="Document pages"
           onClick={(e) => {
             // a tap on the empty space around the pages
             if ((e.target !== e.currentTarget && e.target !== content.current) || isEcho(e)) return;
             cancelQueuedTap();
             editors.current?.commit();
+            closeField();
+            useViewer.setState({ locked: null });
             useStore.getState().select(null);
           }}
         >
@@ -180,6 +155,7 @@ export function Viewer() {
         <PageNotice />
         <ActionOverlay />
         <SwitchingDock />
+        <ContextMenu />
       </div>
     </ViewerContext.Provider>
   );

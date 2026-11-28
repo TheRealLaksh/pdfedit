@@ -227,6 +227,8 @@ const sections = {
     d.key(66);
     await d.sleep(2200);
     await idle();
+    // the lines are read again after the save
+    await d.waitFor("[...document.querySelectorAll('.pv-sr button')].some((b) => /Item 5.*C/.test(b.textContent))", 8000).catch(() => {});
     check("Enter saves", !(await state()).editing && (await lineTexts()).some((t) => /Item 5.*C/.test(t)));
     s = await openLine("Item 7 cable set");
     const revision = s.revision;
@@ -409,17 +411,23 @@ const sections = {
     check("a Hindi line opens", s.value === texts[3], s.value);
     await d.evaluate("(() => { const f = document.querySelector('[data-testid=line-editor]'); f.setSelectionRange(f.value.length, f.value.length); })()");
     await d.sleep(500);
+    // Gboard commits a composition it did not start after a moment (in any text field, however plain), so
+    // what is checked is that each step shows at the end of the line while it is being composed
+    const shownSteps = [];
     for (const part of [" न", " नम", " नमस", " नमस्", " नमस्ते"]) {
       await d.cdp("Input.imeSetComposition", { text: part, selectionStart: part.length, selectionEnd: part.length });
-      await d.sleep(150);
+      s = await state();
+      shownSteps.push(!!s.value?.startsWith(texts[3]) && s.value.endsWith(part));
+      await d.sleep(60);
     }
     s = await state();
-    check("composing text (input method) appears while it is composed", s.value === `${texts[3]} नमस्ते`, s.value);
+    check("composing text (input method) appears while it is composed", shownSteps.every(Boolean), [shownSteps, s.value]);
     check("caret visible while composing", caretSeen(s), s.caret);
     await button("[data-testid=editor-done]", 3000);
     await idle();
     await d.sleep(800);
-    check("Hindi saved", (await lineTexts()).some((t) => t.includes("नमस्ते")));
+    await d.waitFor("[...document.querySelectorAll('.pv-sr button')].some((b) => b.textContent.includes('नमस्ते'))", 15000).catch(() => {});
+    check("Hindi saved", (await lineTexts()).some((t) => t.includes("नमस्ते")), (await lineTexts()).slice(2, 6));
   },
 
   async tools() {
@@ -594,9 +602,199 @@ const sections = {
     // download (the click is caught so Android does not leave Chrome for a viewer)
     await d.evaluate("window.__saved = null; HTMLAnchorElement.prototype.click = function () { if (this.download) window.__saved = this.download; }");
     await button(".sh-iconbtn-primary", 2500);
+    // phones get a sheet to share or save from
+    if (await d.evaluate("!!document.querySelector('[data-testid=finish-save]')")) await button("[data-testid=finish-save]", 1500);
     check("download saves the edited file", (await d.evaluate("window.__saved")) === "images (edited).pdf", await d.evaluate("window.__saved"));
   },
 };
+
+/* ---------- fonts, line arrows, fit, locked lines, forms on the page, marks ---------- */
+
+const fieldStyle = () =>
+  d.evaluate("(() => { const f = document.querySelector('[data-testid=line-editor]'); return f && getComputedStyle(f).fontFamily; })()");
+const exists = (selector) => d.evaluate(`!!document.querySelector(${JSON.stringify(selector)})`);
+
+Object.assign(sections, {
+  async fonts() {
+    await open(`${DOCS}/invoice.pdf`);
+    await d.calibrate();
+    await openLine("Billed to");
+    await d.waitFor("/pe-font-/.test(getComputedStyle(document.querySelector('[data-testid=line-editor]')).fontFamily)", 20000).catch(() => {});
+    check("typing preview uses a loaded font (the document's own or the stand in)", /pe-font-/.test(await fieldStyle()), await fieldStyle());
+    await button('.pv-phonebar [aria-label="Font and size"]', 600);
+    await button('.pv-phonebar [aria-label="Font"]', 1500);
+    const sheet = await d.evaluate(`(() => { const p = document.querySelector('[data-testid=font-picker]'); if (!p) return null; const r = p.getBoundingClientRect();
+      const small = [...p.querySelectorAll('button, input')].filter((e) => { const b = e.getBoundingClientRect(); return b.width > 1 && b.height < 36; }).length;
+      return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, vv: visualViewport.height, small, options: p.querySelectorAll('[role=option]').length, details: p.querySelector('.pv-font-details').textContent }; })()`);
+    check("font sheet fills the screen, controls finger sized", sheet && sheet.left >= -1 && sheet.right <= 413 && Math.abs(sheet.bottom - sheet.top - sheet.vv) < 3 && !sheet.small, sheet);
+    check("font sheet says which font the line uses and lists fonts", sheet && /pt/.test(sheet.details) && sheet.options > 10, sheet);
+    check("the keyboard is put away to browse", !d.keyboardShown());
+    await d.waitFor("document.querySelectorAll('[data-testid=font-picker] .pv-font-sample[data-loaded]').length >= 3", 30000).catch(() => {});
+    check("fonts preview the line in their own letters", (await d.evaluate("document.querySelectorAll('[data-testid=font-picker] .pv-font-sample[data-loaded]').length")) >= 3);
+    d.screenshot(`${OUT}/font-sheet.png`);
+    d.key(4);
+    await d.sleep(1200);
+    let s = await state();
+    check("Back closes only the font sheet", !(await exists("[data-testid=font-picker]")) && !!s.editing, s.editing);
+    await button('.pv-phonebar [aria-label="Font"]', 1200);
+    await button('[data-testid=font-picker] input[type=search]', 900);
+    await type("lora");
+    await named("[data-testid=font-picker] [role=option]", "Lora", 2500);
+    s = await state();
+    check("picking a font returns to the line with the keyboard", s.editing && s.focused && d.keyboardShown(), [s.editing, s.focused]);
+    check("the bar names the picked font", (await d.evaluate("document.querySelector('.pv-font-button')?.textContent")) === "Lora");
+    await button("[data-testid=editor-done]", 3500);
+    await idle();
+    check("the picked font is saved", (await state()).canUndo);
+  },
+
+  async stepping() {
+    await open(`${DOCS}/invoice.pdf`);
+    await d.calibrate();
+    let s = await openLine("Item 3 cable set");
+    const zoom = s.zoom;
+    await button('.pv-phonebar [aria-label="Next line"]', 1800);
+    s = await state();
+    check("next line opens the neighbour, keyboard and zoom kept", s.editing && s.value !== "Item 3 cable set" && s.focused && d.keyboardShown() && s.zoom === zoom, [s.value, s.zoom, zoom]);
+    check("and keeps the caret above the bar", caretSeen(s), s);
+    await button('.pv-phonebar [aria-label="Previous line"]', 1800);
+    s = await state();
+    check("previous line goes back", s.value === "Item 3 cable set", s.value);
+    await type(" G");
+    await button('.pv-phonebar [aria-label="Next line"]', 600);
+    await idle();
+    await d.sleep(2000);
+    s = await state();
+    check("stepping saves the line first", s.editing && s.focused && (await lineTexts()).some((t) => /Item 3 cable set G/.test(t)), [s.value, s.editing]);
+
+    // longer than there is room for
+    await closeEditor();
+    await openLine("Item 3 cable set G");
+    await type(" with a much longer description than the cell holds");
+    await d.waitFor("!!document.querySelector('[data-testid=fit-chip]')", 8000).catch(() => {});
+    const chip = await d.evaluate("document.querySelector('[data-testid=fit-chip]')?.textContent");
+    check("a warning appears while the text grows too long", /Runs|Longer/.test(chip ?? ""), chip);
+    s = await state();
+    check("the line is still visible above the warning", caretSeen(s), s);
+    const wide = s.field.w;
+    d.screenshot(`${OUT}/fit.png`);
+    await button("[data-testid=fit-chip] button", 900);
+    s = await state();
+    check("one tap fits it, keyboard stays", s.field.w < wide * 0.9 && d.keyboardShown() && !!s.editing, [wide, s.field.w]);
+    await closeEditor();
+  },
+
+  async locked() {
+    await open(`${FIXTURES}/broken-pua.pdf`);
+    await d.calibrate();
+    await d.waitFor("!!document.querySelector('.pv-linebox-locked')", 20000).catch(() => {});
+    const spot = await d.evaluate(`(() => { const e = document.querySelector('.pv-linebox-locked'); if (!e) return null; e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return { x: r.x + Math.min(60, r.width / 2), y: r.y + r.height / 2 }; })()`);
+    if (!check("a line that cannot be edited is marked", !!spot)) return;
+    await d.sleep(700);
+    // the offer to read the whole page sits at the bottom, clear of the lines
+    check("the recognise offer leaves the top lines free", await d.evaluate(`(() => { const n = document.querySelector('[data-testid=ocr-prompt]'); return !!n && n.getBoundingClientRect().top > ${spot.y} + 40; })()`));
+    await d.tap(spot.x, spot.y);
+    await d.sleep(1500);
+    if (!(await exists("[data-testid=locked-bar]"))) {
+      await d.tap(spot.x, spot.y);
+      await d.sleep(1500);
+    }
+    const bar = await d.evaluate(`(() => { const b = document.querySelector('[data-testid=locked-bar]'); if (!b) return null; const r = b.getBoundingClientRect(); return { text: b.textContent, left: r.left, right: r.right, bottom: r.bottom, vv: visualViewport.height }; })()`);
+    check("tapping it offers the ways forward", bar && /Cover and retype/.test(bar.text) && bar.left >= 0 && bar.right <= 413 && bar.bottom <= bar.vv, bar);
+    d.screenshot(`${OUT}/locked.png`);
+    d.key(4);
+    await d.sleep(900);
+    check("Back puts the offer away and stays in the app", !(await exists("[data-testid=locked-bar]")) && (await d.evaluate("!!__pdfedit.getState().doc")));
+    await d.tap(spot.x, spot.y);
+    await d.sleep(1500);
+    await named("[data-testid=locked-bar] button", "Cover and retype", 3500);
+    await idle();
+    await d.sleep(1500);
+    let s = await state();
+    check("cover and retype opens a new box", s.editing?.startsWith("new:"), s.editing);
+    if (!d.keyboardShown() && s.field) {
+      await d.tap(s.field.x + 20, s.field.y + s.field.h / 2);
+      await d.sleep(1500);
+    }
+    await type("Typed again");
+    await button("[data-testid=editor-done]", 3000);
+    await idle();
+    check("the retyped line is saved", (await state()).canUndo);
+  },
+
+  async formsOnPage() {
+    await open(`${FIXTURES}/forms.pdf`);
+    await d.calibrate();
+    await d.waitFor("!!document.querySelector('.pv-field')", 20000).catch(() => {});
+    const targets = await d.evaluate("[...document.querySelectorAll('.pv-field')].map((e) => { const r = e.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; })");
+    check("fields on the page are finger sized targets", targets.length > 0 && targets.every(([w, h]) => w >= 44 && h >= 44), targets);
+    const textField = ".pv-field[aria-label^=Fill]";
+    await d.evaluate(`document.querySelector('${textField}').scrollIntoView({ block: 'center' })`);
+    await d.sleep(700);
+    await button(textField, 2000);
+    check("tapping a field on the page opens the keyboard", (await exists("[data-testid=field-bar]")) && d.keyboardShown());
+    await type("Ravi");
+    const seen = await d.evaluate(`(() => { const f = document.querySelector('.pv-field-open').getBoundingClientRect(); const dock = document.querySelector('[data-testid=editor-dock]').getBoundingClientRect(); return { ok: f.top >= 40 && f.bottom <= dock.top + 2, f: f.toJSON(), dock: dock.top }; })()`);
+    check("the field being filled stays visible above its bar", seen.ok, seen);
+    d.screenshot(`${OUT}/form-field.png`);
+    const first = await d.evaluate("document.querySelector('.pv-field-open').dataset.field");
+    await button('[data-testid=editor-dock] [aria-label="Next field"]', 2500);
+    await idle();
+    const next = await d.evaluate("({ name: document.querySelector('.pv-field-open')?.dataset.field })");
+    check("next field moves on", next.name && next.name !== first, [first, next]);
+    await button("[data-testid=field-done]", 2000);
+    await idle();
+    check("the value is saved", (await state()).canUndo);
+    const box = ".pv-field[role=checkbox]";
+    await d.evaluate(`document.querySelector('${box}').scrollIntoView({ block: 'center' })`);
+    await d.sleep(700);
+    const before = await d.evaluate(`document.querySelector('${box}').getAttribute('aria-checked')`);
+    await button(box, 2500);
+    await idle();
+    await d.sleep(800);
+    check("a checkbox ticks at one tap", (await d.evaluate(`document.querySelector('${box}').getAttribute('aria-checked')`)) !== before, before);
+  },
+
+  async marks() {
+    await open(`${DOCS}/invoice.pdf`);
+    await d.calibrate();
+    await named(".sh-bottom button", "Add text", 900);
+    const bar = await d.evaluate(`(() => { const b = document.querySelector('[data-testid=marks-bar]'); if (!b) return null; const all = [...b.querySelectorAll('button')].map((e) => e.getBoundingClientRect());
+      return { n: all.length, outside: all.filter((r) => r.left < 0 || r.right > innerWidth).length, small: all.filter((r) => r.height < 44 || r.width < 44).length }; })()`);
+    check("add text offers marks, all on screen and finger sized", bar && bar.n >= 7 && !bar.outside && !bar.small, bar);
+    await named("[data-testid=marks-bar] button", "Tick", 500);
+    let revision = (await state()).revision;
+    await d.tap(330, 300);
+    await d.sleep(2000);
+    await idle();
+    let s = await state();
+    check("a tap puts a tick, without a keyboard", s.revision > revision && !s.editing && !d.keyboardShown(), s.editing);
+    revision = s.revision;
+    await d.tap(330, 340);
+    await d.sleep(2000);
+    await idle();
+    check("the tick stays armed for the next", (await state()).revision > revision);
+    await named("[data-testid=marks-bar] button", "Date", 500);
+    revision = (await state()).revision;
+    await d.tap(80, 520);
+    await d.sleep(2000);
+    await idle();
+    check("a date is added at a tap", (await state()).revision > revision);
+    d.screenshot(`${OUT}/marks.png`);
+    await named(".sh-bottom button", "Edit text", 900);
+    // long press on empty paper
+    const at = await d.evaluate(`(() => { const p = document.querySelector('[data-page="0"]').getBoundingClientRect(); return { x: p.left + p.width * 0.5, y: p.bottom - 40 }; })()`);
+    await d.evaluate("document.querySelector('.pv-scroll').scrollTop = 0");
+    const [x, y] = await d.toScreen(at.x, Math.min(at.y, 600));
+    d.shell(`input swipe ${x} ${y} ${x} ${y} 900`);
+    await d.sleep(1200);
+    check("long press on empty paper offers what can be added", await d.evaluate("/Add text here/.test(document.querySelector('[data-testid=context-menu]')?.textContent ?? '')"));
+    d.screenshot(`${OUT}/menu.png`);
+    d.key(4);
+    await d.sleep(800);
+    check("Back closes the menu", !(await exists("[data-testid=context-menu]")) && (await d.evaluate("!!__pdfedit.getState().doc")));
+  },
+});
 
 d.shell("settings put system accelerometer_rotation 0; settings put system user_rotation 0");
 for (const [name, run] of Object.entries(sections)) {
