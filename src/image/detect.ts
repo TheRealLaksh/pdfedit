@@ -1,12 +1,17 @@
-/** Finds the lines of text in a picture: OCR passes, cut into separate pieces, as quads in picture pixels. */
-import { joinWords } from "../ocr/convert";
+/**
+ * Finds the lines of text in a picture: OCR passes, cut into separate pieces, as quads in picture pixels,
+ * then every line grown to its full length and read once more on its own.
+ */
+import { joinWords, weightedConfidence } from "../ocr/convert";
+import { OCR_LANGUAGES } from "../ocr/languages";
 import type { OcrLine, OcrPageResult, RenderedPage } from "../engine/types";
 import { angleOf, bounds, quadSize, rectQuad, rotateQuad } from "./geometry";
+import { grow, lineImage } from "./lines";
 import type { Align, Picture, Quad4, TextBox } from "./types";
 
 export type Recognise = (
   image: RenderedPage,
-  options: { languages: string[]; scale: number; signal?: AbortSignal; onProgress?: (p: { status: string; progress: number }) => void },
+  options: { languages: string[]; scale: number; line?: boolean; signal?: AbortSignal; onProgress?: (p: { status: string; progress: number }) => void },
 ) => Promise<OcrPageResult>;
 
 /** pixels per point told to the recogniser (it assumes about 300 dpi) */
@@ -164,12 +169,114 @@ export function merge(first: Found[], second: Found[]): Found[] {
   for (const found of second) {
     if (found.confidence < 50) continue;
     const clash = out.filter((o) => overlaps(o.quad, found.quad));
-    const worth = (f: Found) => f.text.length * Math.max(0, f.confidence - 35);
     if (clash.length && worth(found) <= clash.reduce((s, c) => s + worth(c), 0) * 1.15) continue;
     for (const c of clash) out.splice(out.indexOf(c), 1);
     out.push(found);
   }
   return out;
+}
+
+/** share of the progress bar used before the lines are read one by one */
+const PAGE_SHARE = 0.8;
+/** a picture with more lines than this keeps the first reading for the rest */
+const MAX_LINE_READS = 200;
+
+const length = (text: string) => text.replace(/\s/g, "").length;
+
+/** the models for one line: Latin letters and digits are read without the other scripts, which confuse digits */
+export function lineLanguages(text: string, used: string[]): string[] {
+  const latin = used.filter((code) => OCR_LANGUAGES.some((l) => l.code === code && l.script === "Latin"));
+  return latin.length && !/(?![0-9\p{Script=Latin}])[\p{L}\p{N}]/u.test(text) ? latin : used;
+}
+
+/**
+ * The ways one line is read, the usual one first. A line in another script is also tried with English
+ * leading: the other model alone loses or misreads the figures in it.
+ */
+export function lineModels(text: string, used: string[]): string[][] {
+  const first = lineLanguages(text, used);
+  return first === used && used.indexOf("eng") > 0 ? [used, ["eng", ...used.filter((code) => code !== "eng")]] : [first];
+}
+
+/** how much was read, and how surely */
+const worth = (f: Found) => f.text.length * Math.max(0, f.confidence - 35);
+
+/** whether the closer reading of a line replaces the first one; `further` = its box now covers more text */
+export function preferred(first: Found, second: Found, further: boolean): boolean {
+  if (second.confidence < 50) return false;
+  if (further) return length(second.text) > length(first.text) && second.confidence >= Math.max(55, first.confidence - 20);
+  const gain = second.confidence - first.confidence;
+  // as much text and surer is enough; a reading that lost some of it has to be clearly surer
+  return length(second.text) >= length(first.text) ? gain > 0 : gain >= 3 && length(second.text) >= length(first.text) * 0.85;
+}
+
+/** grows every box over the rest of its line and reads each line again on its own, taking the better reading */
+export async function wholeLines(
+  picture: Picture,
+  found: Found[],
+  used: string[],
+  recognise: Recognise,
+  options: { signal?: AbortSignal; onProgress?: (status: string, progress: number) => void },
+): Promise<Found[]> {
+  const quads = found.map((f) => f.quad);
+  const out: (Found | null)[] = [...found];
+  const absorbed = new Set<number>();
+  let reads = 0;
+  const readWith = async (quad: Quad4, languages: string[]): Promise<Found | null> => {
+    reads++;
+    try {
+      const result = await recognise(
+        { page: 0, revision: 0, ...lineImage(picture, quad) },
+        { languages, scale: SCALE, line: true, signal: options.signal },
+      );
+      const text = result.lines.map((l) => l.text).join(" ").trim();
+      return text ? { quad, text, confidence: Math.round(weightedConfidence(result.lines)) } : null;
+    } catch (e) {
+      if (options.signal?.aborted || (e as Error).name === "AbortError") throw e;
+      // the first reading stands
+      return null;
+    }
+  };
+  const read = async (quad: Quad4, ways: string[][]) => {
+    let best: Found | null = null;
+    for (const languages of ways) {
+      const next = await readWith(quad, languages);
+      if (next && (!best || worth(next) > worth(best))) best = next;
+    }
+    return best;
+  };
+  // lines read with the same models follow each other (changing models is slow); the longest part of a
+  // split line goes first and takes in the others
+  const models = found.map((f) => lineModels(f.text, used));
+  const order = found.map((_, i) => i).sort((a, b) => models[a]!.join().localeCompare(models[b]!.join()) || found[b]!.text.length - found[a]!.text.length);
+  for (const [n, i] of order.entries()) {
+    if (absorbed.has(i) || reads >= MAX_LINE_READS) continue;
+    options.onProgress?.("Reading text", PAGE_SHARE + ((1 - PAGE_SHARE) * n) / order.length);
+    const first = out[i]!;
+    const grown = grow(picture, quads, i, absorbed);
+    const parts = [i, ...grown.absorbed].map((j) => out[j]!);
+    const joined: Found = { quad: grown.quad, text: parts.map((p) => p.text).join(" "), confidence: Math.round(weightedConfidence(parts)) };
+    const further = grown.added > 0.3 || grown.absorbed.length > 0;
+    // an unsure first reading may have mistaken the script: then all the languages get a try as well
+    const ways = first.confidence < 60 && !models[i]!.some((m) => m.join() === used.join()) ? [...models[i]!, used] : models[i]!;
+    const second = await read(grown.quad, ways);
+    if (second && preferred(joined, second, further)) {
+      out[i] = second;
+      quads[i] = grown.quad;
+      for (const j of grown.absorbed) {
+        absorbed.add(j);
+        out[j] = null;
+      }
+    } else if (!further) {
+      out[i] = { ...first, quad: grown.quad };
+      quads[i] = grown.quad;
+    } else {
+      // what lay beyond the box could not be read as more of the line: the box stays
+      const own = await read(first.quad, models[i]!);
+      if (own && preferred(first, own, false)) out[i] = own;
+    }
+  }
+  return out.filter((f): f is Found => !!f);
 }
 
 export async function detectText(
@@ -182,10 +289,12 @@ export async function detectText(
   const read = async (p: Picture, by: number, languages: string[], from: number, to: number) => {
     const result = await recognise(
       { page: 0, revision: 0, width: p.width, height: p.height, data: p.data },
-      { languages, scale: SCALE, signal: options.signal, onProgress: (r) => options.onProgress?.(r.status, from + (to - from) * r.progress) },
+      { languages, scale: SCALE, signal: options.signal, onProgress: (r) => options.onProgress?.(r.status, page(from + (to - from) * r.progress)) },
     );
     return { result, found: result.lines.flatMap((l) => pieces(l, SCALE / by, picture)) };
   };
+  // the passes over the whole picture; reading line by line fills the rest of the progress
+  const page = (progress: number) => progress * PAGE_SHARE;
   let found: Found[] = [];
   let languages = options.languages;
   let done = 0;
@@ -205,6 +314,7 @@ export async function detectText(
   if (!found.length) found = main.found;
   const used = languages.length ? languages : main.result.languages;
   if (negative) found = merge(found, (await read(negative, factor, used, 0.75, 1)).found);
+  found = await wholeLines(picture, found, used, recognise, options);
   found.sort((a, b) => bounds(a.quad)[1] - bounds(b.quad)[1] || bounds(a.quad)[0] - bounds(b.quad)[0]);
   return { boxes: found.map((f, i) => ({ id: `t${i}`, source: "ocr" as const, ...f })), languages: used };
 }

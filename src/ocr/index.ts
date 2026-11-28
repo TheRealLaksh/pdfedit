@@ -15,6 +15,8 @@ export interface RecognizeOptions {
   languages: string[];
   /** pixels per point used to render `image` (to convert boxes to page space) */
   scale: number;
+  /** `image` is one upright line, dark on light, read as it is in tesseract's single line mode (needs languages) */
+  line?: boolean;
   onProgress?: (p: OcrProgress) => void;
   signal?: AbortSignal;
 }
@@ -94,7 +96,8 @@ async function run(image: RenderedPage, options: RecognizeOptions, cancelled: ()
     return { page: image.page, languages: options.languages, lines: [] };
   }
   await breathe();
-  let prepared = cleanImage(gray);
+  const single = !!options.line && options.languages.some(Boolean);
+  let prepared: Prepared = single ? { image: gray, toSource: [1, 0, 0, 1, 0, 0] } : cleanImage(gray);
   await breathe();
   check();
 
@@ -102,7 +105,9 @@ async function run(image: RenderedPage, options: RecognizeOptions, cancelled: ()
   const chosen = [...new Set(options.languages.filter(Boolean))];
   let result: Pass;
 
-  if (chosen.length) {
+  if (single) {
+    result = await pass(gray, chosen, dpi, check, report, 0.1, 0.99, "7");
+  } else if (chosen.length) {
     prepared = withoutRules(straighten(prepared), dpi);
     await breathe();
     check();
@@ -189,7 +194,7 @@ async function pass(
   report: Report,
   from: number,
   to: number,
-  /** page segmentation: "3" finds columns and blocks, "6" takes the page as one block */
+  /** page segmentation: "3" finds columns and blocks, "6" takes the page as one block, "7" as one line */
   layout = "3",
 ): Promise<Pass> {
   check();

@@ -1,5 +1,6 @@
 /** The picture text editor: open, read, retype, undo, draw a box, export with the plain note, leave. */
 import type { Page } from "@playwright/test";
+import { readFileSync } from "node:fs";
 import * as mupdf from "mupdf";
 import { chooseFiles, expect, isPhone, saved, start, test } from "./helpers";
 
@@ -56,9 +57,9 @@ async function openPictureEditor(page: Page, png: Buffer) {
 }
 
 /** taps the picture at a picture coordinate */
-async function tapPicture(page: Page, x: number, y: number) {
+async function tapPicture(page: Page, x: number, y: number, height = HEIGHT) {
   const box = (await page.locator(".im-canvas").boundingBox())!;
-  const point = { x: box.x + (x / WIDTH) * box.width, y: box.y + (y / HEIGHT) * box.height };
+  const point = { x: box.x + (x / WIDTH) * box.width, y: box.y + (y / height) * box.height };
   if (isPhone(page)) await page.touchscreen.tap(point.x, point.y);
   else await page.mouse.click(point.x, point.y);
 }
@@ -107,6 +108,14 @@ test("retypes a line of a picture and exports it with the plain note", async ({ 
   const changed = difference(before, after, 160, 220);
   expect(changed.inside).toBeGreaterThan(60);
   expect(changed.outside).toBe(0);
+});
+
+test("a line of a device picture is recognised to its end", async ({ page }) => {
+  // taken on Android, where the first reading stopped before "18" and took "10" for "70"
+  await openPictureEditor(page, readFileSync("tests/image/fixtures/notice.png"));
+  await expect(page.locator(".im-box")).toHaveCount(5);
+  await tapPicture(page, 200, 170, 520);
+  await expect(textField(page)).toHaveValue("Opening hours 10 to 18");
 });
 
 test("undo, redo and comparing with the original", async ({ page }) => {

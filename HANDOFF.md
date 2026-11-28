@@ -92,12 +92,13 @@ Device testing: `C:devandroid-sdk`, AVD `pdfedit-phone`, `tests/device/` (see sc
 <!-- handoff:auto:start -->
 ## Auto: repo state
 
-_Refreshed 28 Nov 2026, 5:28 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
+_Refreshed 28 Nov 2026, 5:45 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
 
 Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `0921e0c` 2026-11-28 17:28 fix(image): show the whole picture when drawing a new text area
 - `f752bd8` 2026-11-28 17:10 feat(shell): finish sheet, drafts, sample, thumbnails, new design, install and search pages
 - `7487e0e` 2026-11-28 17:10 feat(viewer): real font preview and picker, overflow fit, form filling, fill marks, menus and keyboard use
 - `aa564f2` 2026-11-28 16:41 feat(image): edit the text inside pictures with matched fonts and rebuilt backgrounds
@@ -112,12 +113,16 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `ecff063` 2026-11-28 06:39 docs: keep owner-restricted PDFs editable with a warning
 - `1982251` 2026-11-28 00:21 docs: record summary email and secret-scan result
 - `dc0044b` 2026-11-28 00:13 docs: mark the live link
-- `622a699` 2026-11-28 00:13 docs: handoff for the live release
 
 ### Uncommitted changes at refresh time
 
 ```
-M  src/image/ui/Stage.tsx
+M  src/image/detect.ts
+A  src/image/lines.ts
+M  src/ocr/index.ts
+ M tests/device/android.mjs
 M  tests/e2e/image.spec.ts
+A  tests/image/fixtures/notice.png
+A  tests/image/lines.test.ts
 ```
 <!-- handoff:auto:end -->
