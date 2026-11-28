@@ -164,7 +164,16 @@ export async function waitFor(expression, timeout = 30000) {
 let mapping;
 /** where the page's layout viewport sits on the screen, measured from the Android UI tree */
 export function webViewBounds() {
-  shell("uiautomator dump /sdcard/ui.xml >/dev/null 2>&1");
+  // uiautomator is sometimes killed on a busy emulator: try again
+  for (let attempt = 1; ; attempt++) {
+    try {
+      shell("uiautomator dump /sdcard/ui.xml >/dev/null 2>&1");
+      break;
+    } catch (e) {
+      if (attempt >= 4) throw e;
+      shell("sleep 3");
+    }
+  }
   const xml = adb("exec-out", "cat", "/sdcard/ui.xml").toString();
   const node = [...xml.matchAll(/<node [^>]*>/g)].map((m) => m[0]).find((n) => /class="android\.webkit\.WebView"/.test(n) || /compositor_view_holder/.test(n));
   const b = node?.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
