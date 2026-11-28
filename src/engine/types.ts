@@ -134,6 +134,21 @@ export interface MutationResult {
   count?: number;
 }
 
+/** how an edit would fit, in points along the line */
+export interface LineMeasure {
+  /** width of the new text */
+  width: number;
+  originalWidth: number;
+  /** width the text can take, keeping its alignment, before it runs into other text or off the page */
+  maxWidth: number;
+  /** none: fits where the old text was. longer: wider, but there is room. collides: it does not fit */
+  overflow: "none" | "longer" | "collides";
+  /** font size at which the new text would be as wide as the old (or use fit: "shrink") */
+  fitSize: number;
+  /** a font is still downloading, so width is a guess from the number of characters: ask again */
+  estimated: boolean;
+}
+
 export interface FindOptions {
   matchCase?: boolean;
   wholeWord?: boolean;
@@ -263,8 +278,24 @@ export interface ExportOptions {
   password?: string;
   /** export only these pages */
   pages?: number[];
-  /** try to get the file at or under this size by re-encoding images (upload portals) */
+  /**
+   * try to get the file at or under this size by re-encoding images (upload portals). When that is not
+   * possible the smallest file that could be made is returned: ask lastExportInfo() or compare the length
+   */
   maxBytes?: number;
+}
+
+/** how the last exportPdf went */
+export interface ExportReport {
+  bytes: number;
+  maxBytes?: number;
+  /** false: maxBytes could not be reached */
+  reached: boolean;
+  /** pictures that were re-encoded smaller (0: picture quality is untouched) */
+  images: number;
+  /** resolution and JPEG quality the pictures were limited to */
+  dpi?: number;
+  quality?: number;
 }
 
 /** a font program the browser can load with FontFace, for a faithful typing preview */
@@ -274,6 +305,8 @@ export interface PreviewFont {
   family: string;
   /** code points this file can draw; omitted = all it declares itself */
   coverage?: number[];
+  /** getLineFont: choice id of the font new characters are drawn with when this one lacks them */
+  fallback?: string;
 }
 
 export interface RenderedPage {
@@ -317,6 +350,8 @@ export interface EngineAPI {
 
   getPageText(page: number): Promise<PageText>;
   editLines(page: number, edits: LineEdit[]): Promise<MutationResult>;
+  /** cheap enough to call while typing (debounced); changes nothing */
+  measureLine(page: number, edit: LineEdit): Promise<LineMeasure>;
   findText(query: string, options?: FindOptions): Promise<FindMatch[]>;
   /** matches omitted = replace every match of query */
   replaceText(query: string, replacement: string, options?: FindOptions, matches?: FindMatch[]): Promise<MutationResult>;
@@ -362,6 +397,7 @@ export interface EngineAPI {
   addPageNumbers(options: PageNumberOptions): Promise<MutationResult>;
 
   exportPdf(options?: ExportOptions): Promise<Uint8Array>;
+  lastExportInfo(): Promise<ExportReport | null>;
   exportPageImage(page: number, dpi: number, format: "png" | "jpeg"): Promise<Uint8Array>;
   exportText(pages?: number[]): Promise<string>;
 

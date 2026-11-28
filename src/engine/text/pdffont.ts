@@ -354,6 +354,15 @@ export class PdfFont {
     return "";
   }
 
+  /** every code the font's tables give a meaning to */
+  described(): [Code, string][] {
+    const out: [Code, string][] = [];
+    for (const [code, text] of this.toUnicode) out.push([{ code, length: this.composite ? this.lengthOf(code) : 1 }, text]);
+    if (!this.composite)
+      this.encodingTable?.forEach((text, code) => text && !this.toUnicode.has(code) && out.push([{ code, length: 1 }, text]));
+    return out;
+  }
+
   /** candidate codes that the font's tables say will read as `text` */
   codesFor(text: string): Code[] {
     if (!this.reverse) {

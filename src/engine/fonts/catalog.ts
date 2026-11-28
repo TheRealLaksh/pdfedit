@@ -36,6 +36,7 @@ const LATIN_EXTRA: Record<string, string[]> = {
   arimo: [...LGC, "Hebrew"],
   tinos: [...LGC, "Hebrew"],
   cousine: [...LGC, "Hebrew"],
+  rubik: [...LGC, "Hebrew"],
   "noto-sans": [...LGC, "Devanagari"],
   "noto-serif": LGC,
   "noto-sans-mono": LGC,
@@ -100,13 +101,13 @@ function googleFamilies(): FontFamily[] {
   });
 }
 
-function dejavu(key: string, family: string, stem: string, category: Category, italic: string): FontFamily {
+function dejavu(key: string, family: string, stem: string, category: Category, italic: string, more: string[]): FontFamily {
   const base = `${CDN}/dejavu-fonts-ttf@2.37.3/ttf/${stem}`;
   return {
     key,
     family,
     category,
-    scripts: LGC,
+    scripts: [...LGC, ...more],
     urls: {
       r: `${base}.ttf`,
       b: `${base}-Bold.ttf`,
@@ -120,9 +121,11 @@ const katex = (name: string) => `${CDN}/katex@0.16.11/dist/fonts/KaTeX_${name}.t
 
 export const FAMILIES: readonly FontFamily[] = [
   ...googleFamilies(),
-  dejavu("dejavu-sans", "DejaVu Sans", "DejaVuSans", "sans", "Oblique"),
-  dejavu("dejavu-serif", "DejaVu Serif", "DejaVuSerif", "serif", "Italic"),
-  dejavu("dejavu-sans-mono", "DejaVu Sans Mono", "DejaVuSansMono", "mono", "Oblique"),
+  dejavu("dejavu-sans", "DejaVu Sans", "DejaVuSans", "sans", "Oblique", [
+    "Arabic", "Hebrew", "Armenian", "Georgian", "Lao", "Nko", "Tifinagh", "Canadian_Aboriginal", "Ogham",
+  ]),
+  dejavu("dejavu-serif", "DejaVu Serif", "DejaVuSerif", "serif", "Italic", ["Armenian", "Georgian"]),
+  dejavu("dejavu-sans-mono", "DejaVu Sans Mono", "DejaVuSansMono", "mono", "Oblique", ["Arabic", "Armenian", "Georgian", "Lao"]),
   {
     key: "computer-modern",
     family: "Computer Modern",
@@ -201,6 +204,8 @@ const SUBSTITUTES: [RegExp, string][] = [
   [/^symbol/, "noto-sans-math"],
   [/brushscript|lucidahandwriting|segoescript|monotypecorsiva|zapfchancery/, "dancing-script"],
   // fonts of particular scripts (Windows / macOS / legacy encodings)
+  // Windows interface Devanagari is light and tall: Mukta stands closer to it than Noto once sized to match
+  [/nirmala/, "mukta"],
   [/mangal|krutidev|chanakya|devlys|shivaji|walkman|aparajita|sanskrit/, "noto-sans-devanagari"],
   [/kokila|utsaah/, "noto-serif-devanagari"],
   [/vrinda|shonar|solaimanlipi|sutonny|siyamrupali|kalpurush/, "noto-sans-bengali"],

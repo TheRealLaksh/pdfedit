@@ -6,6 +6,8 @@ import { apply, invert, multiply, num, rectFromPoints } from "../geom";
 import type { Align, LineEdit, Matrix, Point, RGB, TextStyle } from "../types";
 import { analyze, fallbackLines, type Analysis } from "./analyze";
 import { diffUnits } from "./diff";
+import { documentFont, DOCUMENT_CHOICE } from "./documentFonts";
+import { METRIC_LETTERS } from "../fonts/match";
 import { Encoder, type NewPiece } from "./encode";
 import { redactAndRewrite, verifyLine } from "./fallback";
 import type { Glyph, ShowOp } from "./interpret";
@@ -168,6 +170,9 @@ async function editLine(s: Session, model: LineModel, edit: LineEdit): Promise<b
   let variant: PdfFont | null = null;
   if (newFace && !style.fontChoice && (!style.family || style.family === line.style.family))
     variant = await findVariant(s, model, style, text);
+  // a font of this document picked by the user types with its own codes wherever it can
+  else if (style.fontChoice?.startsWith(DOCUMENT_CHOICE) && !isComplex(text))
+    variant = pickedFont(s, style.fontChoice);
   const redraw = newFace && !variant;
 
   /* ---------- 1. what stays, what is new ---------- */
@@ -800,6 +805,7 @@ function drawRequest(text: string, ref: Glyph, change: Partial<TextStyle>, scale
       serif: font.flags.serif,
       mono: font.flags.mono,
       bytes: font.fontFile() ?? undefined,
+      widths: letterWidths(font),
     },
     charSpacing: spacingPage / (unit * th),
     wordSpacing: (show.tw * scale) / (textFactor(ref) || 1),
@@ -835,6 +841,23 @@ async function findVariant(s: Session, model: LineModel, change: Partial<TextSty
     if (all) return f;
   }
   return null;
+}
+
+/** how wide the font sets letters and figures, as far as its character map knows them */
+function letterWidths(font: PdfFont): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const c of METRIC_LETTERS) {
+    const code = font.codesFor(c)[0];
+    if (code && font.hasExplicitWidth(code)) out[c] = font.width(code);
+  }
+  return out;
+}
+
+/** the font behind a "doc:" choice, preferably as this page already uses it */
+function pickedFont(s: Session, choice: string): PdfFont | null {
+  const object = Number(choice.slice(DOCUMENT_CHOICE.length));
+  const used = s.analysis.interp?.glyphs.find((g) => g.show.font.obj.isIndirect() && g.show.font.obj.asIndirect() === object);
+  return used?.show.font ?? documentFont(s.ctx, choice);
 }
 
 /* ---------- underline and strike-through ---------- */

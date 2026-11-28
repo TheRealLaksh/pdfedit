@@ -62,7 +62,10 @@ export function cloneDocument(ctx: EngineContext): MuPDF.PDFDocument {
       const value = reference.resolve();
       if (reference.isStream()) {
         object.writeObject(dictionary(value));
-        object.writeRawStream(reference.readRawStream().asUint8Array().slice());
+        // the buffer itself is handed over: a large file must not be held a second and third time
+        const data = reference.readRawStream();
+        object.writeRawStream(data);
+        data.destroy();
       } else object.writeObject(value.isDictionary() ? dictionary(value) : convert(value));
     } catch {
       // a broken object in a damaged file stays empty, as it already is for the viewer

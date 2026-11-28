@@ -5,7 +5,10 @@
  * change that succeeded), so when the worker dies (a wasm crash, out of memory, a call that never ends)
  * it starts a new one, rebuilds the document and carries on. Only the call that caused it fails.
  */
-import type { EngineAPI, EngineRequest, EngineResponse, OpenResult } from "./types";
+import { createDraftKeeper, type DraftInfo, type DraftJournal, type DraftKeeper } from "./draft";
+import type { DocInfo, EngineAPI, EngineRequest, EngineResponse, MutationResult, OpenResult } from "./types";
+
+export type { DraftInfo } from "./draft";
 
 /** `fatal`: the worker that sends this cannot be used any more */
 type Reply = EngineResponse & { fatal?: boolean };
@@ -56,7 +59,9 @@ let active: Call | null = null;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let nextId = 1;
 /** how the open document was made, and what has been done to it since */
-let journal: { open: Step; steps: Step[] } | null = null;
+let journal: DraftJournal | null = null;
+/** the same record, kept on the device so that a closed tab does not lose the work */
+let drafts: DraftKeeper = createDraftKeeper();
 /** the last worker is gone: a new one has to rebuild the document first */
 let empty = false;
 /** page reads that broke the engine, and why */
@@ -132,7 +137,7 @@ function crash(message: string): void {
   if (call) {
     if (PAGE_READS.has(call.method)) broken.set(`${call.method}:${String(call.args[0])}`, message);
     const opening = call.method === "open" || call.method === "createFromImages";
-    call.reject(new Error(opening && message !== HUNG ? UNOPENABLE : message));
+    call.reject(new Error(opening && message !== HUNG && !/not enough memory/.test(message) ? UNOPENABLE : message));
   }
   // rebuild straight away, so the document is back before the next action
   if (journal || queue.length) start();
@@ -152,7 +157,11 @@ function record(call: Call, result: unknown): void {
   if (call.method === "open" || call.method === "createFromImages") {
     if ((result as OpenResult).status !== "ok") return;
     // fonts the user added stay available in every document opened later
-    journal = { open: step, steps: journal?.steps.filter((s) => s.method === "addUserFont") ?? [] };
+    journal = {
+      open: step,
+      steps: journal?.steps.filter((s) => s.method === "addUserFont") ?? [],
+      protected: !!(result as { doc?: DocInfo }).doc?.encrypted,
+    };
     broken.clear();
   } else if (call.method === "close") {
     journal = null;
@@ -161,6 +170,7 @@ function record(call: Call, result: unknown): void {
     journal?.steps.push(step);
     // the page may be different now
     if (call.method !== "addUserFont") broken.clear();
+    if (journal) drafts.record(journal);
   }
 }
 
@@ -202,6 +212,68 @@ export const engine = new Proxy({} as EngineAPI, {
       });
   },
 });
+
+/* ---------- draft recovery ---------- */
+
+export interface RestoredDraft {
+  fileName: string;
+  doc: DocInfo;
+  canUndo: boolean;
+  canRedo: boolean;
+  /** changes that could not be repeated (a font that cannot be downloaded offline, for example) */
+  failed: number;
+}
+
+/** the unsaved work found on this device, if any (kept for seven days) */
+export function loadDraft(): Promise<DraftInfo | null> {
+  return drafts.info();
+}
+
+/**
+ * Opens the draft's file in the engine and repeats its changes. The caller then shows `doc` as it would
+ * a freshly opened file. Null when there is nothing to restore.
+ */
+export async function restoreDraft(): Promise<RestoredDraft | null> {
+  const saved = await drafts.read();
+  if (!saved) return null;
+  const call = (step: Step) => (engine as unknown as Record<string, (...a: unknown[]) => Promise<unknown>>)[step.method]!(...step.args);
+  drafts.pause();
+  let restored = false;
+  try {
+    const opened = (await call(saved.open)) as OpenResult;
+    if (opened.status !== "ok") return null;
+    const out: RestoredDraft = { fileName: opened.doc.fileName, doc: opened.doc, canUndo: false, canRedo: false, failed: 0 };
+    for (const step of saved.steps) {
+      try {
+        const result = (await call(step)) as Partial<MutationResult>;
+        if (result.doc) Object.assign(out, { doc: result.doc, canUndo: !!result.canUndo, canRedo: !!result.canRedo });
+      } catch (e) {
+        console.warn(`A change could not be restored (${step.method})`, e);
+        out.failed++;
+      }
+    }
+    restored = true;
+    return out;
+  } finally {
+    // after a failure the stored draft stays as it was, to be tried again
+    drafts.resume(restored ? (journal ?? undefined) : undefined);
+  }
+}
+
+/** forget the draft: after the file was saved, or when the user does not want it */
+export function clearDraft(): Promise<void> {
+  return drafts.clear();
+}
+
+/** switching drafts off also deletes the stored one */
+export function setDraftsEnabled(on: boolean): Promise<void> {
+  return drafts.setEnabled(on);
+}
+
+/** for tests: keep drafts somewhere else */
+export function useDraftKeeper(keeper: DraftKeeper): void {
+  drafts = keeper;
+}
 
 /** load the worker and wasm before the user picks a file */
 export function warmUpEngine(): void {

@@ -1701,6 +1701,36 @@ function attachRules(models: LineModel[], rules: Decoration[]) {
   }
 }
 
+/**
+ * Lines of the same length whose word gaps are all the same ordinary width were not justified: they only
+ * happen to be equally long (numbered entries, repeated sentences). Justifying stretches every line by a
+ * different amount.
+ */
+function evenlySet(lines: LineModel[]): boolean {
+  let least = Infinity;
+  let most = -Infinity;
+  let counted = 0;
+  for (const m of lines) {
+    let end: number | null = null;
+    let gap = false;
+    for (const unit of m.visual) {
+      if (!unit.text.trim()) {
+        gap = true;
+        continue;
+      }
+      if (gap && end !== null) {
+        const width = (unit.u0 - end) / m.size;
+        least = Math.min(least, width);
+        most = Math.max(most, width);
+        counted++;
+      }
+      gap = false;
+      end = unit.u1;
+    }
+  }
+  return lines.length >= 2 && counted >= 3 * lines.length && most - least < 0.025 && most < 0.4 && least > 0.1;
+}
+
 function detectAlignment(models: LineModel[], interp: Interpretation) {
   const [px0, , px1] = interp.pageRect;
   /** the narrowest left margin of the page */
@@ -1754,6 +1784,8 @@ function detectAlignment(models: LineModel[], interp: Interpretation) {
     const right = Math.max(...list.map((m) => m.u1));
     const tol = (m: LineModel) => Math.max(1.2, 0.14 * m.size);
     const full = list.filter((m) => Math.abs(m.u0 - left) < tol(m) && Math.abs(m.u1 - right) < tol(m)).length;
+    /** decided once per paragraph */
+    let unstretched: boolean | undefined;
     for (const m of list) {
       m.block = { left, right };
       let l = 0;
@@ -1767,7 +1799,7 @@ function detectAlignment(models: LineModel[], interp: Interpretation) {
       }
       let align: Align | null = null;
       // a menu or list whose entries happen to be equally long is not a justified paragraph
-      if (list.length >= 3 && full >= 2 && full >= list.length - 2 && right - left > 9 * m.size && Math.abs(m.u0 - left) < tol(m) && Math.abs(m.u1 - right) < tol(m))
+      if (list.length >= 3 && full >= 2 && full >= list.length - 2 && right - left > 9 * m.size && Math.abs(m.u0 - left) < tol(m) && Math.abs(m.u1 - right) < tol(m) && !(unstretched ??= evenlySet(list.filter((o) => Math.abs(o.u0 - left) < tol(o) && Math.abs(o.u1 - right) < tol(o)))))
         align = "justify";
       // right to left text lines up on the right; a single shared left edge is more likely chance
       else if (m.rtl && r && r + 1 >= l) align = "right";
@@ -1830,6 +1862,7 @@ function detectAlignment(models: LineModel[], interp: Interpretation) {
       if (dv > 2.4 * a.size) break;
       const flush = Math.max(0.8, 0.08 * a.size);
       if (dv < 0.7 * a.size || !similar(a, b) || !long(b) || Math.abs(a.u0 - b.u0) > flush || Math.abs(a.u1 - b.u1) > flush) continue;
+      if (evenlySet([a, b])) continue;
       a.line.align = b.line.align = "justify";
       a.block = b.block = { left: Math.min(a.u0, b.u0), right: Math.max(a.u1, b.u1) };
     }

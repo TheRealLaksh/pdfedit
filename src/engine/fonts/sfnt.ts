@@ -17,6 +17,30 @@ export function sfntKind(bytes: Uint8Array): "sfnt" | "ttc" | "woff" | null {
   return null;
 }
 
+/** the plain font inside a WOFF (version 1) file, whose tables are zlib streams */
+export async function unwrapWoff(bytes: Uint8Array): Promise<Uint8Array> {
+  if (bytes.length < 44 || tagAt(bytes, 0) !== "wOFF") return bytes;
+  const dv = view(bytes);
+  const count = dv.getUint16(12);
+  const tables = new Map<string, Uint8Array>();
+  for (let i = 0; i < count; i++) {
+    const at = 44 + i * 20;
+    if (at + 20 > bytes.length) throw new Error("This web font file is cut off");
+    const offset = dv.getUint32(at + 4);
+    const packed = dv.getUint32(at + 8);
+    const length = dv.getUint32(at + 12);
+    if (offset + packed > bytes.length) throw new Error("This web font file is cut off");
+    let data = bytes.slice(offset, offset + packed);
+    if (packed < length) {
+      const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate"));
+      data = new Uint8Array(await new Response(stream).arrayBuffer());
+    }
+    if (data.length !== length) throw new Error("This web font file is damaged");
+    tables.set(tagAt(bytes, at), data);
+  }
+  return buildSfnt(dv.getUint32(4), tables);
+}
+
 export function faceCount(bytes: Uint8Array): number {
   const kind = sfntKind(bytes);
   if (kind === "ttc") return view(bytes).getUint32(8);
@@ -315,11 +339,19 @@ function cffDict(b: Uint8Array, start: number, end: number): Map<number, number[
       i += 5;
     } else if (c === 30) {
       i++;
-      while (i < end) {
+      // a real number, written as digits in half bytes
+      let digits = "";
+      for (let done = false; !done && i < end; ) {
         const v = b[i++]!;
-        if ((v & 15) === 15 || v >> 4 === 15) break;
+        for (const half of [v >> 4, v & 15]) {
+          if (half === 15) {
+            done = true;
+            break;
+          }
+          digits += ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "E", "E-", "", "-", ""][half];
+        }
       }
-      stack.push(0);
+      stack.push(Number(digits) || 0);
     } else if (c < 247) {
       stack.push(c - 139);
       i++;
@@ -332,6 +364,27 @@ function cffDict(b: Uint8Array, start: number, end: number): Map<number, number[
     }
   }
   return out;
+}
+
+/** glyph count, units per em and font box of a bare CFF program; null when it cannot be read */
+export function cffSummary(cff: Uint8Array): { glyphs: number; unitsPerEm: number; bbox: [number, number, number, number] } | null {
+  try {
+    if (cff[0] !== 1) return null;
+    const names = cffIndex(cff, cff[2]!);
+    const top = cffIndex(cff, names.end).items[0];
+    if (!top || names.items.length !== 1) return null;
+    const dict = cffDict(cff, top[0], top[1]);
+    const charStrings = dict.get(17)?.[0];
+    if (charStrings === undefined || charStrings + 2 > cff.length) return null;
+    const glyphs = (cff[charStrings]! << 8) | cff[charStrings + 1]!;
+    const scale = Math.abs(dict.get(1207)?.[0] ?? 0.001);
+    const unitsPerEm = scale > 0 ? Math.round(1 / scale) : 1000;
+    const b = dict.get(5) ?? [];
+    const bbox = [0, 1, 2, 3].map((i) => Math.round(b[i] ?? 0)) as [number, number, number, number];
+    return glyphs && unitsPerEm >= 16 && unitsPerEm <= 16384 ? { glyphs, unitsPerEm, bbox } : null;
+  } catch {
+    return null;
+  }
 }
 
 /** For a CID-keyed CFF table: gid -> CID. null for name-keyed fonts (there CID = glyph id). */

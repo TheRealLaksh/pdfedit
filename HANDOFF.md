@@ -92,12 +92,13 @@ Device testing: `C:devandroid-sdk`, AVD `pdfedit-phone`, `tests/device/` (see sc
 <!-- handoff:auto:start -->
 ## Auto: repo state
 
-_Refreshed 28 Nov 2026, 9:21 am IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
+_Refreshed 28 Nov 2026, 4:03 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
 
 Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `9e68e69` 2026-11-28 09:21 docs: build plan from the research round
 - `8b7faa1` 2026-11-28 09:20 feat: contracts for faithful typing previews, size-limited export and an image editor
 - `d8569fc` 2026-11-28 09:00 test(phone): device checklist and phone browser tests
 - `e159762` 2026-11-28 09:00 feat(phone): type directly in the tapped line with one toolbar above the keyboard
@@ -112,12 +113,142 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `fa2f5dd` 2026-11-27 23:48 chore: deploy with wrangler through npx
 - `052057d` 2026-11-27 23:41 fix(text): spacing, layered and mixed-style fidelity, readable re-extraction and long lines
 - `74f6157` 2026-11-27 23:33 docs: describe features and limits
-- `a4598bd` 2026-11-27 23:33 fix(viewer): keep a tap made while a change is saving
 
 ### Uncommitted changes at refresh time
 
 ```
-M  HANDOFF.md
-A  docs/BUILD-WAVE2.md
+M index.html
+ M public/manifest.webmanifest
+ M public/robots.txt
+ M public/sw.js
+ M public/theme.js
+ M src/App.tsx
+M  src/engine/client.ts
+A  src/engine/draft.ts
+M  src/engine/engine.ts
+M  src/engine/fonts/catalog.ts
+M  src/engine/fonts/index.ts
+M  src/engine/fonts/layout.ts
+A  src/engine/fonts/match.ts
+A  src/engine/fonts/metrics.data.ts
+A  src/engine/fonts/preview.ts
+M  src/engine/fonts/resolve.ts
+M  src/engine/fonts/sfnt.ts
+A  src/engine/fonts/slices.ts
+M  src/engine/fonts/types.ts
+M  src/engine/ocr/recognised.ts
+M  src/engine/ops/clone.ts
+M  src/engine/ops/export.ts
+M  src/engine/ops/imageData.ts
+M  src/engine/ops/index.ts
+A  src/engine/ops/shrink.ts
+A  src/engine/text/documentFonts.ts
+M  src/engine/text/edit.ts
+M  src/engine/text/index.ts
+M  src/engine/text/layout.ts
+A  src/engine/text/lineFont.ts
+A  src/engine/text/measure.ts
+M  src/engine/text/pdffont.ts
+A  src/engine/text/previewFont.ts
+M  src/engine/types.ts
+ M src/image/ImageEditor.tsx
+ M src/main.tsx
+ M src/store/index.ts
+ M src/ui/shell/Dialogs.tsx
+ M src/ui/shell/Feedback.tsx
+ M src/ui/shell/Panel.tsx
+ M src/ui/shell/StartScreen.tsx
+ M src/ui/shell/ToolBars.tsx
+ M src/ui/shell/TopBar.tsx
+ M src/ui/shell/actions.ts
+ M src/ui/shell/backGuard.ts
+ M src/ui/shell/hooks.ts
+ M src/ui/shell/panels/AboutPanel.tsx
+ M src/ui/shell/panels/ExportPanel.tsx
+ M src/ui/shell/panels/FindPanel.tsx
+ M src/ui/shell/panels/OcrPanel.tsx
+ M src/ui/shell/panels/PagesPanel.tsx
+ M src/ui/shell/pwa.ts
+ M src/ui/shell/shell.css
+ M src/ui/shell/tools.ts
+ M src/ui/shell/uiStore.ts
+ M src/ui/shell/util.ts
+ M src/ui/tokens.css
+ M src/ui/viewer/Overlays.tsx
+ M src/ui/viewer/PageView.tsx
+ M src/ui/viewer/Viewer.tsx
+ M src/ui/viewer/device.ts
+ M src/ui/viewer/editor/PhoneBar.tsx
+ M src/ui/viewer/editor/StyleBar.tsx
+ M src/ui/viewer/editor/TextEditor.tsx
+ M src/ui/viewer/editor/controller.ts
+ M src/ui/viewer/editor/textMetrics.ts
+ M src/ui/viewer/geometry.ts
+ M src/ui/viewer/layers/EditTextLayer.tsx
+ M src/ui/viewer/layers/PlaceLayer.tsx
+ M src/ui/viewer/layers/SelectLayer.tsx
+ M src/ui/viewer/pageData.ts
+ M src/ui/viewer/useViewport.ts
+ M src/ui/viewer/viewer.css
+ M src/ui/viewer/viewerStore.ts
+ M tests/device/phone.mjs
+ M tests/e2e/document.spec.ts
+ M tests/e2e/edit.spec.ts
+ M tests/e2e/helpers.ts
+ M tests/e2e/objects.spec.ts
+A  tests/fonts/gen-metrics.test.ts
+A  tests/fonts/match.test.ts
+A  tests/fonts/preview.test.ts
+M  tests/fonts/scripts.test.ts
+A  tests/fonts/slices.test.ts
+A  tests/integration/draft.test.ts
+A  tests/integration/memory.test.ts
+A  tests/ops/privacy.test.ts
+A  tests/ops/shrink.test.ts
+A  tests/text/wave2.test.ts
+?? public/404.html
+?? public/fonts/
+?? public/og.png
+?? public/sample.pdf
+?? public/screenshots/
+?? public/sitemap.xml
+?? scripts/make-previews.mjs
+?? scripts/make-sample.mjs
+?? src/image/analyze/
+?? src/image/client.ts
+?? src/image/compose.ts
+?? src/image/detect.ts
+?? src/image/erase.ts
+?? src/image/fonts/
+?? src/image/geometry.ts
+?? src/image/image.worker.ts
+?? src/image/metadata.ts
+?? src/image/outline.ts
+?? src/image/raster.ts
+?? src/image/session.ts
+?? src/image/strings.ts
+?? src/image/types.ts
+?? src/image/ui/
+?? src/ui/shell/Drafts.tsx
+?? src/ui/shell/FinishSheet.tsx
+?? src/ui/shell/Install.tsx
+?? src/ui/shell/Shortcuts.tsx
+?? src/ui/shell/Sidebar.tsx
+?? src/ui/shell/boot.ts
+?? src/ui/shell/errors.ts
+?? src/ui/shell/incoming.ts
+?? src/ui/shell/strings.ts
+?? src/ui/shell/swipe.ts
+?? src/ui/viewer/ContextMenu.tsx
+?? src/ui/viewer/actions.ts
+?? src/ui/viewer/editor/FitChip.tsx
+?? src/ui/viewer/editor/FontPicker.tsx
+?? src/ui/viewer/editor/fontFaces.ts
+?? src/ui/viewer/editor/fontName.ts
+?? src/ui/viewer/layers/FormLayer.tsx
+?? src/ui/viewer/useShortcuts.ts
+?? tests/e2e/image.spec.ts
+?? tests/e2e/shell.spec.ts
+?? tests/image/
 ```
 <!-- handoff:auto:end -->

@@ -3,6 +3,9 @@ import type { EngineContext, ModuleChange } from "../context";
 import type { FindMatch, FindOptions, LineEdit, PageText, PreviewFont } from "../types";
 import { analyze } from "./analyze";
 import { applyEdits } from "./edit";
+import { lineFont } from "./lineFont";
+
+export { measureLine } from "./measure";
 import { find, replace } from "./search";
 
 export function analyzePage(ctx: EngineContext, page: number): PageText {
@@ -29,5 +32,5 @@ export async function replaceText(
 
 /** the embedded font behind a line, made loadable by the browser (typing preview) */
 export async function getLineFont(ctx: EngineContext, page: number, lineId: string): Promise<PreviewFont | null> {
-  return null;
+  return lineFont(ctx, page, lineId);
 }

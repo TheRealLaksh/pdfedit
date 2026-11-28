@@ -16,7 +16,16 @@ export interface WriteTextRequest {
   /** resource dictionary (page or form XObject) that fonts get registered in */
   resources: MuPDF.PDFObject;
   /** the document font being replaced, to pick the closest substitute */
-  originalFont?: { name: string; bold: boolean; italic: boolean; serif: boolean; mono: boolean; bytes?: Uint8Array };
+  originalFont?: {
+    name: string;
+    bold: boolean;
+    italic: boolean;
+    serif: boolean;
+    mono: boolean;
+    bytes?: Uint8Array;
+    /** advances of letters and figures, fractions of the em: finds a stand in when the name says nothing */
+    widths?: Record<string, number>;
+  };
   charSpacing?: number;
   wordSpacing?: number;
   /** percent, default 100 */

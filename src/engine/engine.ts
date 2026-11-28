@@ -394,6 +394,12 @@ export class Engine implements EngineAPI {
     return { ...merged, revision: this.revisions[page]! };
   }
 
+  measureLine: EngineAPI["measureLine"] = async (page, edit) => {
+    const lines = await this.getPageText(page);
+    const info = this.info().pages[page]!;
+    return text.measureLine(this.context, lines, [info.width, info.height], edit);
+  };
+
   editLines: EngineAPI["editLines"] = (page, edits) =>
     this.mutate("Edit text", async (ctx) => {
       this.guard("edit", page);
@@ -512,6 +518,7 @@ export class Engine implements EngineAPI {
     if (options?.flatten) this.guard("render", options.pages);
     return ops.exportPdf(this.context, options);
   };
+  lastExportInfo: EngineAPI["lastExportInfo"] = async () => ops.lastExportInfo(this.context);
   exportPageImage: EngineAPI["exportPageImage"] = async (page, dpi, format) => {
     this.guard("render", page);
     return this.lazily(() => ops.exportPageImage(this.context, page, dpi, format));
@@ -538,16 +545,26 @@ function message(e: unknown): string {
 export function isFatalError(e: unknown): boolean {
   if (typeof WebAssembly !== "undefined" && e instanceof WebAssembly.RuntimeError) return true;
   const text = message(e);
-  const dead = /memory access out of bounds|table index is out of bounds|Aborted\(|out of memory|allocation failed|malloc.*failed|non-existent operation|during an operation/i;
-  if (dead.test(text)) return true;
+  const dead = /memory access out of bounds|table index is out of bounds|Aborted\(|non-existent operation|during an operation/i;
+  if (dead.test(text) || isOutOfMemory(e)) return true;
   return e instanceof RangeError && /call stack/i.test(text) && /wasm/i.test(e.stack ?? "");
 }
 
+/** the file needs more memory than the browser will give */
+export function isOutOfMemory(e: unknown): boolean {
+  return /out of memory|allocation failed|(m|c|re)alloc[^\n]*failed|cannot enlarge memory|invalid (typed )?array(?: buffer)? length/i.test(
+    message(e),
+  );
+}
+
+export const TOO_LARGE =
+  "There is not enough memory on this device for a file this large. Your earlier changes are kept. Try a computer, or split the file into smaller parts.";
 const NOT_DOWNLOADED = "Part of the editor could not be downloaded. Check your connection and try again.";
 export const RESTARTED = "The PDF engine could not process this and was restarted. Your earlier changes are kept.";
 
 /** what to tell the user: MuPDF's and the browser's own wording means nothing to them */
 export function describeError(e: unknown): string {
+  if (isOutOfMemory(e)) return TOO_LARGE;
   if (isFatalError(e)) return RESTARTED;
   const text = message(e);
   if (/too many nested graphics states|exception stack overflow|call stack/i.test(text))
@@ -570,7 +587,14 @@ export async function answer(engine: Engine, request: EngineRequest): Promise<En
     const fatal = isFatalError(e) || !engine.healthy();
     // a part of the editor that is fetched when first needed did not arrive
     const offline = /NetworkError|Failed to fetch dynamically|Importing a module script failed/i.test(error.message);
-    const text = offline && /Aborted|module/i.test(error.message) ? NOT_DOWNLOADED : fatal ? RESTARTED : describeError(error);
+    const text =
+      offline && /Aborted|module/i.test(error.message)
+        ? NOT_DOWNLOADED
+        : isOutOfMemory(error)
+          ? TOO_LARGE
+          : fatal
+            ? RESTARTED
+            : describeError(error);
     return { id, ok: false, error: text, stack: error.stack, fatal };
   }
 }

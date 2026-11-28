@@ -8,4 +8,4 @@ export {
 } from "./pages";
 export { redactAreas } from "./redact";
 export { addPageNumbers, addWatermark } from "./stamps";
-export { exportPageImage, exportPdf, exportText } from "./export";
+export { exportPageImage, exportPdf, exportText, lastExportInfo } from "./export";

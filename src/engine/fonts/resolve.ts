@@ -1,5 +1,10 @@
 /** Decides which fonts may draw a piece of text, in order of preference. Fonts load lazily. */
 import type { EngineContext } from "../context";
+import { documentFont, DOCUMENT_CHOICE } from "../text/documentFonts";
+import { buildDocumentFont } from "../text/previewFont";
+import { unwrapWoff } from "./sfnt";
+import { closestByMetrics, METRIC_LETTERS } from "./match";
+import { SLICED, slicesFor } from "./slices";
 import { family, isStyleOf, matchName, normaliseName, type FontFamily, type Variant } from "./catalog";
 import { loadFace, type Face } from "./face";
 import { scriptInfo } from "./scripts";
@@ -20,6 +25,12 @@ export interface Source {
   needsOutlineCheck: boolean;
   axes?: Record<string, number>;
   load(): Promise<Face | null>;
+  /** the FontChoice id of this font, when it is one the user could pick */
+  choice?: string;
+  /** scripts of a downloadable font: it need not be fetched for text of any other script */
+  scripts?: string[];
+  /** a font that comes in pieces: the sources to try for this text instead of the whole */
+  expand?(text: string): Promise<Source[]>;
 }
 
 export type Cjk = "sc" | "tc" | "jp" | "kr";
@@ -34,6 +45,15 @@ export interface Resolver {
   language(script: string): string;
   /** downloads that failed, to explain missing characters */
   errors: string[];
+}
+
+const unwrapped = new WeakMap<Uint8Array, Promise<Uint8Array>>();
+
+/** web fonts are unpacked once per downloaded file, so that the parsed face is reused too */
+function wholeFont(bytes: Uint8Array): Promise<Uint8Array> {
+  let font = unwrapped.get(bytes);
+  if (!font) unwrapped.set(bytes, (font = unwrapWoff(bytes)));
+  return font;
 }
 
 const hashes = new WeakMap<Uint8Array, string>();
@@ -93,18 +113,20 @@ export function createResolver(ctx: EngineContext, request: MeasureTextRequest):
       else variant = "r";
     }
     const url = f.urls[variant]!;
-    return {
-      key: url,
+    const at = (address: string, boldFile: boolean): Source => ({
+      key: address,
+      choice: `web:${f.key}`,
       family: f.family,
+      scripts: f.scripts,
       // the catalog stops at bold: a heavier original gets a little extra stroke
-      synthBold: bold && ((variant !== "b" && variant !== "j") || (heavy && f.key !== "anton")),
+      synthBold: bold && (!boldFile || (heavy && f.key !== "anton")),
       synthItalic: italic && variant !== "i" && variant !== "j",
       substituted,
       needsShapingCheck: false,
       needsOutlineCheck: false,
       async load() {
         try {
-          const face = await loadFace(await ctx.assets.bytes(url));
+          const face = await loadFace(await wholeFont(await ctx.assets.bytes(address)));
           if (!face) errors.push(`${f.family} is not a usable font file`);
           return face;
         } catch (e) {
@@ -112,13 +134,25 @@ export function createResolver(ctx: EngineContext, request: MeasureTextRequest):
           return null;
         }
       },
-    };
+    });
+    const whole = at(url, variant === "b" || variant === "j");
+    if (SLICED.has(f.key))
+      whole.expand = async (part) => {
+        const points = [...new Set([...part].map((c) => c.codePointAt(0)!))].filter((cp) => cp > 32);
+        const urls = await slicesFor(ctx.assets, f.key, bold, points);
+        if (!urls?.length) return [whole];
+        // fetched side by side; the whole font stays as the last resort
+        for (const u of urls) void ctx.assets.bytes(u).catch(() => undefined);
+        return [...urls.map((u) => at(u, bold)), whole];
+      };
+    return whole;
   };
 
   const userSource = (u: UserFace, substituted: boolean): Source => {
     const axes = u.info.weightAxis && bold && !u.info.bold ? { wght: 700 } : undefined;
     return {
       key: `user:${u.hash}${axes ? ":b" : ""}`,
+      choice: u.id,
       family: u.info.family || u.name,
       synthBold: bold && !u.info.bold && !axes,
       synthItalic: italic && !u.info.italic,
@@ -156,15 +190,37 @@ export function createResolver(ctx: EngineContext, request: MeasureTextRequest):
     if (!base.some((b) => b.key === s.key)) base.push(s);
   };
 
+  const choice = style.fontChoice;
+  /** a font of this document picked by the user */
+  const picked = choice?.startsWith(DOCUMENT_CHOICE) ? documentFont(ctx, choice) : null;
+
   const requested = originalFont && normaliseName(style.family) === normaliseName(originalFont.name);
   /** the family changed on purpose (style differs from the document font) */
-  const wantedName = !originalFont || requested || !style.family ? (originalFont?.name ?? style.family) : style.family;
-  const familyChanged = !!originalFont && !!style.family && !requested && !sameFamily(style.family, originalFont.name);
+  const wantedName = picked
+    ? picked.name
+    : !originalFont || requested || !style.family
+      ? (originalFont?.name ?? style.family)
+      : style.family;
+  const familyChanged = !!picked || (!!originalFont && !!style.family && !requested && !sameFamily(style.family, originalFont.name));
 
   let primaryKey: string | undefined;
 
-  const choice = style.fontChoice;
-  if (choice?.startsWith("user:")) {
+  if (picked) {
+    add({
+      key: `doc:pick:${choice}:${picked.fontFile()?.length ?? 0}`,
+      choice,
+      family: picked.name,
+      synthBold: bold && !picked.flags.bold,
+      synthItalic: italic && !picked.flags.italic,
+      substituted: false,
+      needsShapingCheck: true,
+      needsOutlineCheck: true,
+      load: async () => {
+        const built = await buildDocumentFont(picked);
+        return built ? loadFace(built.data) : null;
+      },
+    });
+  } else if (choice?.startsWith("user:")) {
     const faces = userFaces(ctx);
     const chosen = faces.find((u) => u.id === choice);
     if (chosen) {
@@ -182,7 +238,7 @@ export function createResolver(ctx: EngineContext, request: MeasureTextRequest):
     }
   }
 
-  if (!choice || !base.length) {
+  if (!choice || !base.length || picked) {
     const user = userByName(wantedName);
     if (user) add(userSource(user, false));
 
@@ -206,11 +262,16 @@ export function createResolver(ctx: EngineContext, request: MeasureTextRequest):
     if (match) {
       primaryKey = match.family.key;
       add(catalogSource(match.family, !match.exact));
+    } else if (originalFont?.widths && !familyChanged) {
+      // an unknown name: the face with the most similar letter widths
+      const alike = family(closestByMetrics(originalFont.widths, originalFont) ?? "");
+      if (alike) add(catalogSource(alike, true));
     }
   }
 
-  const mono = originalFont && !familyChanged ? originalFont.mono : style.mono;
-  const serif = originalFont && !familyChanged ? originalFont.serif : style.serif;
+  const flags = picked?.flags ?? (originalFont && !familyChanged ? originalFont : style);
+  const mono = flags.mono;
+  const serif = flags.serif;
   const generic = family(mono ? "cousine" : serif ? "tinos" : "arimo")!;
   add(catalogSource(generic, true));
 

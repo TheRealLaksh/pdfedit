@@ -5,18 +5,26 @@ import { encodeLatin1 } from "../content/tokenizer";
 import * as ocr from "../ocr";
 import { rectToQuad } from "../geom";
 import * as text from "../text";
-import type { ExportOptions, PageText, Rect } from "../types";
+import type { ExportOptions, ExportReport, PageText, Rect } from "../types";
 import { ensureAppearances } from "./forms";
 import { cloneDocument } from "./clone";
 import { inspectPage } from "./guard";
 import { discardPages, pageRefs } from "./pages";
 import { orderByDirection, type Directed } from "./readingOrder";
 import { assertPage, latin1, pageSelection, streamBytes, withPage } from "./shared";
+import { shrinkToSize } from "./shrink";
 
 const MAX_PIXELS = 48_000_000;
 
+const reports = new WeakMap<object, ExportReport>();
+
+/** what the last export of this document came to */
+export const lastExportInfo = (ctx: EngineContext): ExportReport | null => reports.get(ctx.doc) ?? null;
+
 export async function exportPdf(ctx: EngineContext, options: ExportOptions = {}): Promise<Uint8Array> {
   const password = options.password;
+  const limit = options.maxBytes && options.maxBytes > 0 ? options.maxBytes : 0;
+  const compress = options.compress || !!limit;
   if (password !== undefined && password !== "" && new TextEncoder().encode(password).length > 127)
     throw new Error("The password is too long (127 bytes at most)");
   if (options.pages) {
@@ -36,7 +44,7 @@ export async function exportPdf(ctx: EngineContext, options: ExportOptions = {})
       clone.bake(true, true);
     }
     // subsetting follows what every page draws: drawings inside themselves crash it
-    if (options.compress && subsettable(clone)) {
+    if (compress && subsettable(clone)) {
       try {
         clone.subsetFonts();
       } catch {
@@ -53,12 +61,38 @@ export async function exportPdf(ctx: EngineContext, options: ExportOptions = {})
       "compress-fonts": "yes",
       encrypt: password ? "aes-256" : "none",
     };
-    if (options.compress) settings.objstms = "yes";
+    if (compress) settings.objstms = "yes";
     if (password) {
       settings["user-password"] = password;
       settings["owner-password"] = password;
     }
-    return clone.saveToBuffer(settings).asUint8Array().slice();
+    // decoded pictures left from showing the pages are not needed while saving
+    ctx.mupdf.emptyStore();
+    const write = (doc: MuPDF.PDFDocument, how: Record<string, string>) => {
+      const buffer = doc.saveToBuffer(how);
+      try {
+        return buffer.asUint8Array().slice();
+      } finally {
+        buffer.destroy();
+      }
+    };
+    const save = (doc: MuPDF.PDFDocument) => write(doc, settings);
+    if (!limit) {
+      const bytes = save(clone);
+      reports.set(ctx.doc, { bytes: bytes.length, reached: true, images: 0 });
+      return bytes;
+    }
+    const base = write(clone, { ...settings, encrypt: "none" });
+    const result = shrinkToSize(ctx, base, limit, save);
+    reports.set(ctx.doc, {
+      bytes: result.bytes.length,
+      maxBytes: limit,
+      reached: result.reached,
+      images: result.images,
+      dpi: result.step?.dpi,
+      quality: result.step?.quality,
+    });
+    return result.bytes;
   } finally {
     clone.destroy();
   }

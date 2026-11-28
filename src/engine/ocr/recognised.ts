@@ -363,9 +363,13 @@ export function mergePageText(ctx: EngineContext, base: PageText): PageText {
     });
   }
 
-  const content = base.lines.filter((l) => !claimed.some((r) => overlap(r, l.rect) > 0.35));
+  const unclaimed = base.lines.filter((l) => !claimed.some((r) => overlap(r, l.rect) > 0.35));
+  const covers = (a: TextLine, b: TextLine) => overlap(a.rect, b.rect) > 0.35;
+  // text that can be edited as it is stays; what cannot (broken encoding, too long) gives way to the
+  // recognised line over it, which is how such a line becomes editable on an otherwise good page
   const ocr = lines
-    .filter(({ line, edited }) => ocrWins || edited || !content.some((c) => overlap(c.rect, line.rect) > 0.35))
+    .filter(({ line, edited }) => ocrWins || edited || !unclaimed.some((c) => c.editable && covers(c, line)))
     .map((l) => l.line);
+  const content = unclaimed.filter((c) => c.editable || !ocr.some((line) => covers(c, line)));
   return { ...base, kind: meta.scan ? "scanned" : base.kind, lines: [...ocr, ...content] };
 }

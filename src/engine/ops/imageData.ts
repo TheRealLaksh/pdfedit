@@ -1,4 +1,8 @@
-/** Turning user supplied image files into PDF image XObjects, honouring camera (EXIF) orientation. */
+/**
+ * Turning user supplied image files into PDF image XObjects. Camera (EXIF) orientation is applied to the
+ * placement and then every piece of metadata is left behind: no GPS position, camera, date, comment,
+ * thumbnail or appended file travels into the PDF.
+ */
 import type * as MuPDF from "mupdf";
 import type { EngineContext } from "../context";
 import type { Matrix } from "../types";
@@ -55,6 +59,99 @@ export function exifOrientation(data: Uint8Array): number {
   return 1;
 }
 
+const startsWith = (data: Uint8Array, at: number, text: string) =>
+  [...text].every((c, i) => data[at + i] === c.charCodeAt(0));
+
+/**
+ * A JPEG with only what is needed to show it: the picture data, its tables, the colour profile and the two
+ * markers that say how to read the colours. Everything else (EXIF with GPS, XMP, IPTC, comments, maker
+ * notes, embedded thumbnails, and whatever phones append after the end: videos, second pictures) is dropped.
+ * Returns null when the data is not a JPEG that can be walked.
+ */
+export function stripJpeg(data: Uint8Array): Uint8Array | null {
+  if (data[0] !== 0xff || data[1] !== 0xd8) return null;
+  const parts: Uint8Array[] = [data.subarray(0, 2)];
+  let at = 2;
+  let scanned = false;
+  let jfif = false;
+  while (at < data.length) {
+    if (data[at] !== 0xff) {
+      // stray bytes between segments are skipped, as decoders do
+      at++;
+      continue;
+    }
+    const marker = data[at + 1];
+    if (marker === undefined) break;
+    if (marker === 0xff) {
+      at++;
+      continue;
+    }
+    if (marker === 0xd9) break;
+    // markers without a length
+    if (marker === 0x00 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd8)) {
+      at += 2;
+      continue;
+    }
+    if (at + 4 > data.length) break;
+    const length = (data[at + 2]! << 8) | data[at + 3]!;
+    if (length < 2) break;
+    let end = Math.min(data.length, at + 2 + length);
+    const body = at + 4;
+    if (marker === 0xda) {
+      // the compressed data runs to the next marker that is not a restart or a stuffed byte
+      while (end < data.length) {
+        if (data[end] === 0xff) {
+          const next = data[end + 1];
+          if (next !== undefined && next !== 0x00 && next !== 0xff && !(next >= 0xd0 && next <= 0xd7)) break;
+        }
+        end++;
+      }
+      parts.push(data.subarray(at, end));
+      scanned = true;
+    } else if (marker === 0xe0) {
+      if (!jfif && startsWith(data, body, "JFIF\0") && length >= 16) {
+        jfif = true;
+        // the density stays, the thumbnail goes
+        const header = data.slice(at, at + 18);
+        header[2] = 0;
+        header[3] = 16;
+        header[16] = 0;
+        header[17] = 0;
+        parts.push(header);
+      }
+    } else if (marker === 0xe2) {
+      if (startsWith(data, body, "ICC_PROFILE\0")) parts.push(data.subarray(at, end));
+    } else if (marker === 0xee) {
+      if (startsWith(data, body, "Adobe")) parts.push(data.subarray(at, at + Math.min(end - at, 16)));
+    } else if (!((marker >= 0xe0 && marker <= 0xef) || marker === 0xfe || (marker >= 0xf0 && marker <= 0xfd))) {
+      parts.push(data.subarray(at, end));
+    }
+    at = end;
+  }
+  if (!scanned) return null;
+  parts.push(Uint8Array.of(0xff, 0xd9));
+  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let offset = 0;
+  for (const part of parts) {
+    out.set(part, offset);
+    offset += part.length;
+  }
+  return out;
+}
+
+/** the image to put into the file: built only from pixels, or from a JPEG stripped of everything personal */
+function cleanImage(ctx: EngineContext, data: Uint8Array, image: MuPDF.Image): MuPDF.Image {
+  const stripped = stripJpeg(data);
+  if (stripped) return new ctx.mupdf.Image(stripped);
+  // other formats are stored as pixels: nothing from the file (text chunks, EXIF boxes) can follow
+  const pixmap = image.toPixmap();
+  try {
+    return new ctx.mupdf.Image(pixmap);
+  } finally {
+    pixmap.destroy();
+  }
+}
+
 export function decodeImage(ctx: EngineContext, data: Uint8Array): MuPDF.Image {
   try {
     const image = new ctx.mupdf.Image(data);
@@ -78,7 +175,14 @@ export function embedImage(ctx: EngineContext, data: Uint8Array, existing?: numb
       if (subtype.isName() && subtype.asName() === "Image" && candidate.get("Width").asNumber() === image.getWidth())
         ref = candidate;
     }
-    ref ??= ctx.doc.addImage(image);
+    if (!ref) {
+      const clean = cleanImage(ctx, data, image);
+      try {
+        ref = ctx.doc.addImage(clean);
+      } finally {
+        clean.destroy();
+      }
+    }
     return {
       ref,
       width: turned ? image.getHeight() : image.getWidth(),

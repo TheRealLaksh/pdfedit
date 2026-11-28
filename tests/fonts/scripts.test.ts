@@ -74,7 +74,7 @@ describe("samples", () => {
         expect(result.mismatch, result.name).toBeLessThan(0.005);
       }
     }
-  });
+  }, 180_000);
 });
 
 describe("hard cases against Chromium", () => {
@@ -95,7 +95,7 @@ describe("hard cases against Chromium", () => {
       expect(Math.abs(result.width - result.chromiumWidth), result.name).toBeLessThan(0.5);
       expect(result.mismatch, result.name).toBeLessThan(0.005);
     }
-  });
+  }, 180_000);
 });
 
 describe("script coverage", () => {

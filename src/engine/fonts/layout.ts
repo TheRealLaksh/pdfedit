@@ -164,6 +164,40 @@ async function patchworkRanges(resolver: Resolver, text: string): Promise<{ star
   return out;
 }
 
+/** every font may hold these, or the fonts of other scripts would be asked for plain letters */
+const EVERYWHERE = new Set(["Latin", "Greek", "Cyrillic", "Common", "Inherited"]);
+const EAST_ASIAN = new Set(["Han", "Hiragana", "Katakana", "Hangul", "Bopomofo"]);
+/** punctuation shared by Indic scripts that only their fonts have */
+const DANDA = /[।॥]/;
+
+/** false when a downloadable font cannot hold this script, so it need not be fetched to find out */
+function mayHold(source: Source, script: string): boolean {
+  const held = source.scripts;
+  if (!held || EVERYWHERE.has(script) || held.includes(script)) return true;
+  if (held.includes("Symbols") || held.includes("Math")) return true;
+  if (EAST_ASIAN.has(script) && held.some((s) => EAST_ASIAN.has(s))) return true;
+  const info = scriptInfo(script);
+  return !info || [info.sans, info.serif, info.mono].some((key) => !!key && source.choice === `web:${key}`);
+}
+
+/**
+ * Fonts of different scripts are fetched at the same time, not one after the other as the line is read:
+ * for every script the document and user fonts cannot draw, the first likely download is started.
+ */
+async function prefetch(resolver: Resolver, clusters: { text: string; own: string }[]): Promise<void> {
+  const texts = new Map<string, string>();
+  for (const c of clusters) if (c.own !== "Common") texts.set(c.own, (texts.get(c.own) ?? "") + c.text);
+  // a single script is fetched by the choosing itself
+  if (texts.size < 2) return;
+  const local = resolver.base.filter((s) => !s.scripts);
+  const faces = await Promise.all(local.map(async (source) => ({ source, face: await source.load() })));
+  for (const [script, text] of texts) {
+    if (faces.some(({ source, face }) => face && covers(face, source, text) && canShape(face, source, script))) continue;
+    const first = [...resolver.base.filter((s) => s.scripts), ...resolver.forScript(script)].find((s) => mayHold(s, script));
+    if (first) void (first.expand ? first.expand(text).then((list) => list[0]?.load()) : first.load()).catch(() => undefined);
+  }
+}
+
 async function chooseFonts(resolver: Resolver, text: string, levels: Uint8Array, missing: Set<string>): Promise<Cluster[]> {
   const raw = [...segmenter.segment(text)].map((s) => ({ start: s.index, text: s.segment, own: clusterScript(s.segment) }));
   // characters without a script of their own join the one before them (or after, at the start)
@@ -175,16 +209,29 @@ async function chooseFonts(resolver: Resolver, text: string, levels: Uint8Array,
     const face = await source.load();
     return face ? { source, face } : null;
   };
+  const pieces = new Map<Source, Promise<Source[]>>();
+  const piecesOf = (source: Source): Source[] | Promise<Source[]> => {
+    if (!source.expand) return [source];
+    let list = pieces.get(source);
+    if (!list) pieces.set(source, (list = source.expand(text)));
+    return list;
+  };
+  await prefetch(resolver, raw);
   const skipped = await patchworkRanges(resolver, text);
 
   for (const c of raw) {
     const script = c.own === "Common" ? previous : c.own;
     previous = script;
+    // the script that decides which downloads are worth making
+    const needed = c.own !== "Common" || DANDA.test(c.text) ? script : null;
 
     const usable = async (sources: Source[], part: string) => {
-      for (const source of sources) {
-        const found = await load(source);
-        if (found && covers(found.face, source, part) && (c.own === "Common" || canShape(found.face, source, script))) return found;
+      for (const listed of sources) {
+        if (needed && !mayHold(listed, needed)) continue;
+        for (const source of await piecesOf(listed)) {
+          const found = await load(source);
+          if (found && covers(found.face, source, part) && (c.own === "Common" || canShape(found.face, source, script))) return found;
+        }
       }
       return null;
     };
@@ -194,7 +241,11 @@ async function chooseFonts(resolver: Resolver, text: string, levels: Uint8Array,
     if (!visible.length && last) picked = last;
     // joiners and marks typed on their own stay with the font before them
     const skip = skipped.find((r) => c.start >= r.start && c.start < r.end)?.key;
-    picked ??= await usable(skip ? resolver.base.filter((s) => s.key !== skip) : resolver.base, c.text);
+    const base = skip ? resolver.base.filter((s) => s.key !== skip) : resolver.base;
+    // a space the document's own fonts lack comes from the font next to it: nothing is fetched for it
+    if (!picked && last && !c.text.trim() && base.some((s) => s.key.startsWith("doc:")))
+      picked = (await usable(base.filter((s) => !s.scripts), c.text)) ?? (await usable([last.source], c.text));
+    picked ??= await usable(base, c.text);
     if (!picked && c.own === "Common" && last) picked = await usable([last.source], c.text);
     picked ??= await usable(resolver.forScript(script), c.text);
     picked ??= await usable(resolver.fallbacks(visible[0]?.codePointAt(0) ?? 32), c.text);
