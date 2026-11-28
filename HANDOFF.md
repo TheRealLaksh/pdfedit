@@ -22,22 +22,24 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 - `tests/` fixtures, unit, integration, e2e
 
 ## Status
-- 28 Nov 2026: **live** at https://pdfedit.lakshpradhwani.com (Cloudflare Pages, project `pdfedit`).
-- Built by 7 module agents, then tested and fixed by 4 QA agents (desktop, phone, multilingual fidelity,
-  robustness/security).
-- Checks on the merged code: typecheck clean; 1088 vitest pass (1 skipped); Playwright 273 pass, 36 skipped,
-  0 failed on desktop + Pixel 7 + iPhone emulation, both on a local build and against the live site. Offline
-  open verified on the live site.
-- Not verified: any real phone or tablet, real scanner output, LaTeX / LibreOffice documents.
+- 28 Nov 2026 evening: **live** with the second round: new phone editing (type in the line), text-box fixes,
+  features from 13 research reports, and the **image text editor** (`src/image`).
+- Checks: typecheck clean; vitest 1182 passed, 44 skipped (under full load 2 files failed to load / timed out
+  once; both pass alone, 16/16); Playwright on the live site 373 passed, 61 skipped, 1 iPhone image test
+  failed once and passed 4/4 on rerun. Real touches on an Android emulator (`tests/device/`).
+- Not verified: any real phone, iPhone behaviour beyond WebKit emulation, real photos in the image editor.
 
 ### Known limits
-- No paragraph reflow; longer text can overrun cells or columns. Search does not cross line breaks.
-- Substitute fonts can look different (other than Arial/Times metric twins), notably CJK vs SimSun / Yu Gothic.
-- Re-reading or re-editing can be unreliable after whole-line rewrites in Urdu Nastaliq and some Word
-  Indic/Thai files; some PyMuPDF htmlbox Hindi lines read with missing letters. Vertical Japanese rewritten
-  mostly in Latin letters reads back letter by letter.
-- Replaced scan text is covered, not erased; text on busy photographs in a scan covers badly. Telugu/Kannada/
-  Malayalam/Urdu OCR about 82-91%.
+- No paragraph reflow; longer text can overrun cells or columns (the editor warns and offers to fit).
+- Substitute fonts can look different, notably CJK. No typing preview for Type1/Type3 or Indic subsets without
+  shaping tables.
+- Re-editing can be unreliable after whole-line rewrites in Arabic, Hebrew, Urdu Nastaliq and some Word
+  Indic/Thai files.
+- Replaced scan text is covered, not erased. OCR accuracy depends on the picture.
+- Image editor: new letters can look slightly paler in screen text and Courier/Consolas; busy backgrounds can
+  leave smudges; no outlines, soft shadows, gradients or curved text; perspective needs manual corners; huge
+  pictures are downscaled; a Hindi-heavy page was once auto-detected as Thai (pick the language).
+- Large files (150 MB+) use a lot of memory; not measured since the engine changes.
 - Lines over 1500 glyphs are read-only. Owner-restricted PDFs open with a warning; export drops the restriction.
 - XFA forms show only partly. No SRI on the two pinned tesseract scripts from jsDelivr.
 
@@ -50,20 +52,13 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
   engine document (breaks undo).
 
 ## Next steps
-Laksh asked on 28 Nov (then went AFK; "implement it as your project"):
-1. Fix the phone UI and touch bugs and make every text box editable (two agents running: phone UI; engine boxes).
-2. Test on the real Android emulator, deploy.
-3. Run 10 research / UI-research agents and 3 feature-research agents (read-only), then apply the UI changes and
-   add the worthwhile features without asking.
-4. Add image editing: every recognisable text box in an uploaded image editable in matching style and font,
-   looking real. Keep the rule: nothing built to hide that a file was edited (mark exports, no faked metadata).
-5. Test everything, deploy, report. "Surveillance" in the request is read as supervising the agents' work; no
-   user tracking is added to a privacy product.
-
-Device testing: `C:devandroid-sdk`, AVD `pdfedit-phone`, `tests/device/` (see script headers).
+1. Laksh: try it on your own phone (typing, tables, a photo in the image editor) and note what looks off.
+2. Translate the interface (plan: `.tmp/research/R10-ui-i18n.md`; Hindi first). Not started.
+3. Smaller items from the research: recent files, camera scan, print, large-file memory, paragraph reflow.
 
 ## Open questions / waiting on others
-- None.
+- Enable Android "share to PDFEdit" (`share_target`)? Left off: if the service worker were evicted, a shared file
+  would be sent to the server. One manifest key; handling is built.
 
 ## Decisions not to undo
 - Owner-restricted PDFs stay editable with a warning; the export drops the restriction (Laksh, 28 Nov).
@@ -76,6 +71,7 @@ Device testing: `C:devandroid-sdk`, AVD `pdfedit-phone`, `tests/device/` (see sc
 - Small commits, pushed after each (Laksh, 27 Nov session only; ask again next session).
 
 ## Session log
+- 2026-11-28 evening: build wave 2 and image editor merged, tested, deployed; live checks above.
 - 2026-11-28: 13 research reports (`.tmp/research/`, local only); build wave 2 started (engine, viewer, shell,
   image editor; plan in `docs/BUILD-WAVE2.md`). Then: interface translation, QA round, deploy, report.
 - 2026-11-28: engine box QA (not committed or deployed): box sweep in `tests/text/sweep/` (see `sweep.test.ts`
@@ -92,12 +88,13 @@ Device testing: `C:devandroid-sdk`, AVD `pdfedit-phone`, `tests/device/` (see sc
 <!-- handoff:auto:start -->
 ## Auto: repo state
 
-_Refreshed 28 Nov 2026, 5:48 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
+_Refreshed 28 Nov 2026, 6:07 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
 
 Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `402a5d6` 2026-11-28 17:48 test(device): retry the screen dump on a busy phone
 - `deca56d` 2026-11-28 17:45 fix(image): whole lines are boxed and digits read reliably
 - `0921e0c` 2026-11-28 17:28 fix(image): show the whole picture when drawing a new text area
 - `f752bd8` 2026-11-28 17:10 feat(shell): finish sheet, drafts, sample, thumbnails, new design, install and search pages
@@ -112,11 +109,11 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `ae902cd` 2026-11-28 06:56 docs: handoff for the phone fixes and next work
 - `051b4a0` 2026-11-28 06:53 test(device): drive the app with real touches on an Android phone
 - `ecff063` 2026-11-28 06:39 docs: keep owner-restricted PDFs editable with a warning
-- `1982251` 2026-11-28 00:21 docs: record summary email and secret-scan result
 
 ### Uncommitted changes at refresh time
 
 ```
-M  tests/device/android.mjs
+M  HANDOFF.md
+M  README.md
 ```
 <!-- handoff:auto:end -->

@@ -14,6 +14,8 @@ Live: https://pdfedit.lakshpradhwani.com
 - Add text, images, signatures, shapes, highlights, ink and whiteout; move or replace existing images.
 - True redaction, form filling, find and replace, watermarks and page numbers.
 - Reorder, rotate, delete, duplicate, split, merge and extract pages.
+- Edit the text inside pictures (photos, screenshots, posters) in a matching font; exports carry a plain
+  "Edited with PDFEdit" note and no source metadata.
 - Export with compression, flattening or an AES-256 password, or as images and plain text.
 - Works on phones, installs as an app and works offline after the first visit.
 
