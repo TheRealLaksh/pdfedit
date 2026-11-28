@@ -92,12 +92,13 @@ Device testing: `C:devandroid-sdk`, AVD `pdfedit-phone`, `tests/device/` (see sc
 <!-- handoff:auto:start -->
 ## Auto: repo state
 
-_Refreshed 28 Nov 2026, 4:03 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
+_Refreshed 28 Nov 2026, 4:41 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
 
 Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `4135e0c` 2026-11-28 16:03 feat(engine): real preview fonts, size-limited export, drafts, private image metadata stripped
 - `9e68e69` 2026-11-28 09:21 docs: build plan from the research round
 - `8b7faa1` 2026-11-28 09:20 feat: contracts for faithful typing previews, size-limited export and an image editor
 - `d8569fc` 2026-11-28 09:00 test(phone): device checklist and phone browser tests
@@ -112,7 +113,6 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `1969f44` 2026-11-28 00:02 fix(deploy): stop Cloudflare injecting scripts into the page without losing compression
 - `fa2f5dd` 2026-11-27 23:48 chore: deploy with wrangler through npx
 - `052057d` 2026-11-27 23:41 fix(text): spacing, layered and mixed-style fidelity, readable re-extraction and long lines
-- `74f6157` 2026-11-27 23:33 docs: describe features and limits
 
 ### Uncommitted changes at refresh time
 
@@ -123,35 +123,31 @@ M index.html
  M public/sw.js
  M public/theme.js
  M src/App.tsx
-M  src/engine/client.ts
-A  src/engine/draft.ts
-M  src/engine/engine.ts
-M  src/engine/fonts/catalog.ts
-M  src/engine/fonts/index.ts
-M  src/engine/fonts/layout.ts
-A  src/engine/fonts/match.ts
-A  src/engine/fonts/metrics.data.ts
-A  src/engine/fonts/preview.ts
-M  src/engine/fonts/resolve.ts
-M  src/engine/fonts/sfnt.ts
-A  src/engine/fonts/slices.ts
-M  src/engine/fonts/types.ts
-M  src/engine/ocr/recognised.ts
-M  src/engine/ops/clone.ts
-M  src/engine/ops/export.ts
-M  src/engine/ops/imageData.ts
-M  src/engine/ops/index.ts
-A  src/engine/ops/shrink.ts
-A  src/engine/text/documentFonts.ts
-M  src/engine/text/edit.ts
-M  src/engine/text/index.ts
-M  src/engine/text/layout.ts
-A  src/engine/text/lineFont.ts
-A  src/engine/text/measure.ts
-M  src/engine/text/pdffont.ts
-A  src/engine/text/previewFont.ts
-M  src/engine/types.ts
- M src/image/ImageEditor.tsx
+M  src/image/ImageEditor.tsx
+A  src/image/analyze/match.ts
+A  src/image/analyze/measure.ts
+A  src/image/analyze/segment.ts
+A  src/image/client.ts
+A  src/image/compose.ts
+A  src/image/detect.ts
+A  src/image/erase.ts
+A  src/image/fonts/catalog.ts
+A  src/image/fonts/metrics.data.ts
+A  src/image/fonts/shape.ts
+A  src/image/geometry.ts
+A  src/image/image.worker.ts
+A  src/image/metadata.ts
+A  src/image/outline.ts
+A  src/image/raster.ts
+A  src/image/session.ts
+A  src/image/strings.ts
+A  src/image/types.ts
+A  src/image/ui/Panel.tsx
+A  src/image/ui/Sheets.tsx
+A  src/image/ui/Stage.tsx
+A  src/image/ui/image.css
+A  src/image/ui/picture.ts
+A  src/image/ui/useEditor.ts
  M src/main.tsx
  M src/store/index.ts
  M src/ui/shell/Dialogs.tsx
@@ -191,21 +187,22 @@ M  src/engine/types.ts
  M src/ui/viewer/useViewport.ts
  M src/ui/viewer/viewer.css
  M src/ui/viewer/viewerStore.ts
+ M tests/device/android.mjs
  M tests/device/phone.mjs
  M tests/e2e/document.spec.ts
  M tests/e2e/edit.spec.ts
  M tests/e2e/helpers.ts
+A  tests/e2e/image.spec.ts
  M tests/e2e/objects.spec.ts
-A  tests/fonts/gen-metrics.test.ts
-A  tests/fonts/match.test.ts
-A  tests/fonts/preview.test.ts
-M  tests/fonts/scripts.test.ts
-A  tests/fonts/slices.test.ts
-A  tests/integration/draft.test.ts
-A  tests/integration/memory.test.ts
-A  tests/ops/privacy.test.ts
-A  tests/ops/shrink.test.ts
-A  tests/text/wave2.test.ts
+ M tests/e2e/ui.spec.ts
+A  tests/image/core.test.ts
+A  tests/image/helpers.ts
+A  tests/image/session.test.ts
+A  tests/image/tools/detect.test.ts
+A  tests/image/tools/gen-metrics.test.ts
+A  tests/image/tools/harness.test.ts
+A  tests/image/tools/make-scenes.mjs
+A  tests/image/tools/photos.py
 ?? public/404.html
 ?? public/fonts/
 ?? public/og.png
@@ -214,21 +211,6 @@ A  tests/text/wave2.test.ts
 ?? public/sitemap.xml
 ?? scripts/make-previews.mjs
 ?? scripts/make-sample.mjs
-?? src/image/analyze/
-?? src/image/client.ts
-?? src/image/compose.ts
-?? src/image/detect.ts
-?? src/image/erase.ts
-?? src/image/fonts/
-?? src/image/geometry.ts
-?? src/image/image.worker.ts
-?? src/image/metadata.ts
-?? src/image/outline.ts
-?? src/image/raster.ts
-?? src/image/session.ts
-?? src/image/strings.ts
-?? src/image/types.ts
-?? src/image/ui/
 ?? src/ui/shell/Drafts.tsx
 ?? src/ui/shell/FinishSheet.tsx
 ?? src/ui/shell/Install.tsx
@@ -245,10 +227,9 @@ A  tests/text/wave2.test.ts
 ?? src/ui/viewer/editor/FontPicker.tsx
 ?? src/ui/viewer/editor/fontFaces.ts
 ?? src/ui/viewer/editor/fontName.ts
+?? src/ui/viewer/editor/useFit.ts
 ?? src/ui/viewer/layers/FormLayer.tsx
 ?? src/ui/viewer/useShortcuts.ts
-?? tests/e2e/image.spec.ts
 ?? tests/e2e/shell.spec.ts
-?? tests/image/
 ```
 <!-- handoff:auto:end -->

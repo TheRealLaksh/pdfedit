@@ -1,0 +1,636 @@
+/* image editor: the shared design tokens, its own class names (im-) */
+.im-app {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 100dvh;
+  display: grid;
+  grid-template: "top" auto "main" minmax(0, 1fr) "panel" auto / minmax(0, 1fr);
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.4 var(--font);
+  overflow: hidden;
+}
+.im-app *,
+.im-dialog * {
+  box-sizing: border-box;
+}
+.im-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.im-top {
+  grid-area: top;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: var(--toolbar-h);
+  padding: var(--safe-top) calc(8px + var(--safe-right)) 0 calc(4px + var(--safe-left));
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.im-top h1 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.im-icon {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: var(--tap);
+  height: var(--tap);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+.im-icon:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+.im-icon[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.im-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: var(--tap);
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.im-btn:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+.im-btn[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.im-btn.im-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-text);
+}
+.im-btn.im-danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.im-btn:disabled,
+.im-icon:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.im-app :focus-visible,
+.im-dialog :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---------- stage ---------- */
+.im-main {
+  grid-area: main;
+  position: relative;
+  min-height: 0;
+}
+.im-stage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.im-stage[data-mode="draw"],
+.im-stage[data-mode="pick"] {
+  cursor: crosshair;
+}
+.im-sheet {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+}
+.im-canvas {
+  display: block;
+  box-shadow: var(--shadow);
+  /* transparency stays visible */
+  background: repeating-conic-gradient(#d9d9d9 0 25%, #fff 0 50%) 0 0 / 24px 24px;
+}
+.im-canvas[data-pixels="sharp"] {
+  image-rendering: pixelated;
+}
+.im-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+}
+.im-box {
+  fill: transparent;
+  stroke: rgb(47 91 234 / 0.75);
+  stroke-width: 1px;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .im-box:hover {
+    fill: rgb(47 91 234 / 0.1);
+  }
+}
+.im-box[data-edited] {
+  stroke-dasharray: 4 3;
+}
+.im-box[data-chosen] {
+  fill: transparent;
+  stroke: #2f5bea;
+  stroke-width: 1.5px;
+  stroke-dasharray: none;
+}
+/* while a line is chosen the others step back, so that its lettering can be judged */
+.im-app[data-selected] .im-box:not([data-chosen]) {
+  stroke: rgb(47 91 234 / 0.3);
+}
+.im-box:focus-visible {
+  outline: none;
+  stroke-width: 3px;
+}
+.im-drawing {
+  fill: rgb(47 91 234 / 0.15);
+  stroke: #2f5bea;
+  stroke-width: 1.5px;
+  stroke-dasharray: 5 3;
+}
+.im-handle {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  margin: -14px 0 0 -14px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: move;
+  touch-action: none;
+}
+/* a 44px target around the small dot */
+.im-handle::before {
+  content: "";
+  position: absolute;
+  inset: -8px;
+}
+.im-handle span {
+  display: block;
+  width: 12px;
+  height: 12px;
+  margin: 8px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #2f5bea;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.35);
+}
+.im-loupe {
+  position: absolute;
+  top: 8px;
+  width: 120px;
+  height: 120px;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  box-shadow: var(--shadow);
+  background: var(--surface);
+  pointer-events: none;
+}
+.im-loupe[data-side="left"] {
+  left: 8px;
+}
+.im-loupe[data-side="right"] {
+  right: 8px;
+}
+.im-zoom {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.im-banner {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: max-content;
+  max-width: calc(100% - 16px);
+  padding: 6px 8px 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.im-wait {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: 24px;
+  text-align: center;
+}
+
+/* ---------- panel ---------- */
+.im-panel {
+  grid-area: panel;
+  max-height: min(46vh, 380px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 10px calc(12px + var(--safe-right)) calc(10px + var(--safe-bottom)) calc(12px + var(--safe-left));
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+.im-form,
+.im-overview,
+.im-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.im-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+.im-row .im-field {
+  flex: 1;
+  min-width: 0;
+}
+.im-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.im-field > span {
+  font-size: 13px;
+  color: var(--muted);
+}
+.im-field small,
+.im-toggle small,
+.im-fontbtn small {
+  display: block;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.im-app input[type="text"],
+.im-dialog input[type="text"],
+.im-dialog input[type="search"],
+.im-app select {
+  width: 100%;
+  min-height: var(--tap);
+  padding: 0 10px;
+  border: 1px solid var(--control-border, var(--border));
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  /* 16px stops iOS from zooming into the field */
+  font: 16px/1.4 var(--font);
+}
+.im-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.im-note:empty {
+  display: none;
+}
+.im-error {
+  margin: 0;
+  color: var(--danger);
+}
+.im-spin {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.im-spin::before {
+  content: "";
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: im-turn 0.8s linear infinite;
+}
+@keyframes im-turn {
+  to {
+    transform: rotate(1turn);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .im-spin::before {
+    animation-duration: 3s;
+  }
+}
+.im-tabs,
+.im-segmented {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.im-tabs button,
+.im-segmented button {
+  flex: 1;
+  min-height: 40px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.im-tabs button[aria-selected="true"],
+.im-segmented button[aria-pressed="true"] {
+  background: var(--surface);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.14);
+}
+.im-slider {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) 48px;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+.im-slider input {
+  width: 100%;
+  height: var(--tap);
+  accent-color: var(--accent);
+}
+.im-slider output {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.im-select {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.im-app .im-select select {
+  max-width: 220px;
+}
+.im-select input[type="color"] {
+  width: 56px;
+  height: var(--tap);
+  padding: 2px;
+  border: 1px solid var(--control-border, var(--border));
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.im-colour {
+  justify-content: space-between;
+  align-items: center;
+}
+.im-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--tap);
+  cursor: pointer;
+}
+.im-toggle input {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+}
+.im-fontbtn {
+  justify-content: flex-start;
+  text-align: left;
+  padding-block: 4px;
+}
+.im-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.im-actions .im-btn {
+  flex: 1 1 auto;
+}
+.im-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.im-status p {
+  margin: 0;
+}
+.im-status progress {
+  order: 3;
+  width: 100%;
+  accent-color: var(--accent);
+}
+.im-list {
+  display: none;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.im-list button {
+  width: 100%;
+  min-height: var(--tap);
+  padding: 6px 8px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: start;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.im-list button[data-edited] {
+  color: var(--accent);
+}
+
+/* with the keyboard up only the line being typed and its buttons stay */
+@media (max-height: 520px) and (max-width: 899px) {
+  .im-app:has(input.im-text:focus) :is(.im-tabs, .im-tab, .im-zoom) {
+    display: none;
+  }
+}
+
+@media (min-width: 900px) and (min-height: 480px) {
+  .im-app {
+    grid-template: "top top" auto "main panel" minmax(0, 1fr) / minmax(0, 1fr) var(--panel-w, 352px);
+  }
+  .im-panel {
+    max-height: none;
+    padding: 14px 16px;
+    border-top: 0;
+    border-left: 1px solid var(--border);
+  }
+  .im-list {
+    display: block;
+  }
+}
+/* short landscape phones: the panel beside the picture */
+@media (orientation: landscape) and (max-height: 479px) and (min-width: 560px) {
+  .im-app {
+    grid-template: "top top" auto "main panel" minmax(0, 1fr) / minmax(0, 1fr) 300px;
+  }
+  .im-panel {
+    max-height: none;
+    border-top: 0;
+    border-left: 1px solid var(--border);
+  }
+}
+@media (max-width: 480px) {
+  .im-top .im-primary span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .im-top .im-primary {
+    width: var(--tap);
+    padding: 0;
+  }
+}
+
+/* ---------- dialogs ---------- */
+.im-dialog {
+  width: min(520px, 100vw);
+  max-width: 100vw;
+  max-height: min(86dvh, 720px);
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 16px);
+  background: var(--surface);
+  color: var(--text);
+  font: 15px/1.4 var(--font);
+  box-shadow: var(--shadow);
+}
+.im-dialog::backdrop {
+  background: var(--scrim, rgb(0 0 0 / 0.45));
+}
+.im-dialog-body {
+  display: flex;
+  flex-direction: column;
+  max-height: inherit;
+}
+.im-dialog header,
+.im-dialog footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+}
+.im-dialog header {
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+}
+.im-dialog h2 {
+  margin: 0;
+  font-size: 17px;
+}
+.im-dialog h3 {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.im-dialog footer {
+  justify-content: flex-end;
+  border-top: 1px solid var(--border);
+  padding-bottom: calc(8px + var(--safe-bottom, 0px));
+}
+.im-dialog-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px;
+}
+.im-dialog-scroll > * {
+  flex: none;
+}
+.im-fonts,
+.im-languages {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.im-fonts button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 4px 8px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.im-fonts button[aria-pressed="true"] {
+  background: var(--accent-soft);
+}
+.im-fonts small {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+.im-sample {
+  height: 32px;
+  max-width: 62%;
+  object-fit: contain;
+  object-position: right;
+  color: var(--text);
+}
+@media (max-width: 600px) {
+  .im-dialog {
+    width: 100vw;
+    max-height: 90dvh;
+    margin: auto 0 0;
+    border-radius: 16px 16px 0 0;
+  }
+}
