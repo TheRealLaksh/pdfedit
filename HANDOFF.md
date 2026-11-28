@@ -71,6 +71,9 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 - Small commits, pushed after each (Laksh, 27 Nov session only; ask again next session).
 
 ## Session log
+- 2026-11-28/29: image editor: drag a line to move it (finger: tap first), arrow keys; small tabs, badges and
+  buttons detected (generated-replica recall 67% to 92%); Indian-script + English lines read in auto; doubtful
+  readings change only edited words or draw nothing until confirmed. Tested on generated notices, not on ID documents.
 - 2026-11-28: Laksh reported an image edit that did not show: they typed in the reading-correction field. That field
   is now folded away ("Was the original read wrongly?"), the main field is labelled "New text (changes the
   picture)", and a correction offers "Put it on the picture". Image e2e 18/18; deployed.
@@ -92,12 +95,13 @@ Vite + React 19 + TypeScript, zustand, MuPDF.js (wasm, in a worker), HarfBuzz, t
 <!-- handoff:auto:start -->
 ## Auto: repo state
 
-_Refreshed 28 Nov 2026, 6:18 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
+_Refreshed 28 Nov 2026, 8:40 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
 
 Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `645609d` 2026-11-28 18:18 fix(image): make it obvious which field changes the picture
 - `4668201` 2026-11-28 18:12 docs: interface translation on hold
 - `6e9f750` 2026-11-28 18:07 docs: status after the second release
 - `402a5d6` 2026-11-28 17:48 test(device): retry the screen dump on a busy phone
@@ -112,16 +116,30 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `d8569fc` 2026-11-28 09:00 test(phone): device checklist and phone browser tests
 - `e159762` 2026-11-28 09:00 feat(phone): type directly in the tapped line with one toolbar above the keyboard
 - `9f13af1` 2026-11-28 08:43 fix(text): every box groups, edits and re-edits cleanly; sweep over realistic documents
-- `ae902cd` 2026-11-28 06:56 docs: handoff for the phone fixes and next work
 
 ### Uncommitted changes at refresh time
 
 ```
-M  HANDOFF.md
-M  src/image/ImageEditor.tsx
-M  src/image/strings.ts
-M  src/image/ui/Panel.tsx
-M  src/image/ui/image.css
-M  tests/e2e/image.spec.ts
+M HANDOFF.md
+ M src/image/ImageEditor.tsx
+ M src/image/compose.ts
+M  src/image/detect.ts
+ M src/image/erase.ts
+A  src/image/segment.ts
+ M src/image/session.ts
+ M src/image/strings.ts
+ M src/image/types.ts
+ M src/image/ui/Panel.tsx
+ M src/image/ui/Stage.tsx
+ M src/image/ui/image.css
+ M src/image/ui/useEditor.ts
+A  src/image/words.ts
+M  src/ocr/index.ts
+A  src/ocr/indic.ts
+A  tests/image/replicas.ts
+A  tests/image/score.ts
+A  tests/image/small.test.ts
+A  tests/image/tools/recall.test.ts
+?? tests/e2e/image-move.spec.ts
 ```
 <!-- handoff:auto:end -->

@@ -3,6 +3,7 @@ import { multiply } from "../engine/geom";
 import type { Matrix, OcrPageResult, OcrProgress, RenderedPage } from "../engine/types";
 import { convertBlocks, weightedConfidence, type Box, type RawBlock } from "./convert";
 import { alternatives, PROBES } from "./detect";
+import { belief, suspects } from "./indic";
 import { OCR_LANGUAGES, SCRIPT_DEFAULTS } from "./languages";
 import { cleanImage, densestBand, encodePGM, removeRules, shrink, straighten, toGray, turn, type Gray, type Prepared } from "./preprocess";
 import { abortError, detectScript, recognizer, runJob, terminateWorkers } from "./tess";
@@ -132,8 +133,33 @@ async function run(image: RenderedPage, options: RecognizeOptions, cancelled: ()
     let first = sure?.[0] ?? (await probe(prepared.image, guess?.script ?? null, dpi, check, report));
     check();
     result = await pass(prepared.image, withEnglish(first), dpi, check, report, 0.2, 0.75);
+    // lines in an Indian script, alone or beside English, are often taken for English or Thai
+    const indian = await indicReading(result, first, prepared.image, dpi, check, report);
+    if (indian) {
+      result = indian;
+      first = indian.languages[0]!;
+    }
+    // Thai and Arabic are what script detection offers for small or unfamiliar lettering, and their models
+    // make sure-looking nonsense of it: English is tried, and wins when it surely reads far more
+    if (!indian && CATCH_ALL.includes(scriptOf(first))) {
+      check();
+      const latin = await pass(prepared.image, ["eng"], dpi, check, report, 0.75, 0.85);
+      if (sureLetters(result, scriptOf(first)) < sureLetters(latin, "Latin") * 0.25) {
+        result = latin;
+        first = "eng";
+      }
+    }
+    // a script that was guessed but nowhere read surely is a wrong guess: small screen text passes for many
+    if (!indian && sure && scriptOf(first) !== "Latin" && !isThere(result, scriptOf(first))) {
+      check();
+      const latin = await pass(prepared.image, ["eng"], dpi, check, report, 0.75, 0.85);
+      if (latin.score >= result.score * 0.97) {
+        result = latin;
+        first = "eng";
+      }
+    }
     // script detection can be wrong on short or noisy pages
-    if (sure && result.confidence < 55) {
+    if (!indian && sure && result.confidence < 55) {
       check();
       const other = await probe(prepared.image, null, dpi, check, report);
       if (other !== first) {
@@ -156,7 +182,7 @@ async function run(image: RenderedPage, options: RecognizeOptions, cancelled: ()
       }
     }
     result = await asOneBlock(result, prepared.image, dpi, check, report);
-    result = await secondScript(result, prepared.image, dpi, check, report);
+    if (!indian) result = await secondScript(result, prepared.image, dpi, check, report);
     // the guess that the page lay on its side may have been wrong
     if (turnedBy !== 0 && result.confidence < 60) {
       const upright = straighten(asScanned);
@@ -255,7 +281,77 @@ async function secondScript(first: Pass, image: Gray, dpi: number, check: () => 
   const other = guess?.script ? SCRIPT_DEFAULTS[guess.script]?.[0] : undefined;
   if (!other || first.languages.some((l) => scriptOf(l) === scriptOf(other))) return first;
   const retry = await pass(image, [other, ...first.languages], dpi, check, report, 0.9, 0.95);
-  return retry.score > first.score * 1.05 ? retry : first;
+  // the other script has to turn up, and be read with some certainty: small blurred Latin passes for many
+  const found = wordsOf(retry.blocks).filter((w) => scriptShare(w.text, scriptOf(other)));
+  const real = found.reduce((n, w) => n + w.text.length, 0) >= 4 && weightedConfidence(found) >= 60;
+  return real && retry.score > first.score * 1.05 ? retry : first;
+}
+
+/**
+ * Tries Indian-script models on the words of the first reading that may be in one of them; when one reads
+ * them convincingly, the page is read again with that model and English together.
+ */
+async function indicReading(first: Pass, lang: string, image: Gray, dpi: number, check: () => void, report: Report): Promise<Pass | null> {
+  const doubt = suspects(image, first.blocks, lang);
+  if (!doubt) return null;
+  const strip = stack(image, doubt.boxes);
+  let best: string | null = null;
+  let most = 0;
+  for (const candidate of doubt.candidates) {
+    check();
+    let r: Pass;
+    try {
+      r = await pass(strip, [candidate], dpi, check, report, 0.75, 0.75, "6");
+    } catch (e) {
+      if ((e as Error).name === "AbortError") throw e;
+      // a model that cannot be downloaded is left out
+      continue;
+    }
+    const value = belief(candidate, r.text, r.confidence);
+    if (value > most) {
+      most = value;
+      best = candidate;
+    }
+    if (value > 32 && candidate !== "tha") break;
+  }
+  if (!best || best === lang || most < 10) return null;
+  check();
+  const again = await pass(image, withEnglish(best), dpi, check, report, 0.75, 0.85);
+  // a doubtful word that really was English must not cost the rest of the page
+  return again.confidence >= Math.min(60, first.confidence) ? again : null;
+}
+
+const wordsOf = (blocks: RawBlock[]) => blocks.flatMap((b) => b.paragraphs.flatMap((p) => p.lines.flatMap((l) => l.words)));
+
+/** what script detection offers for small or unfamiliar lettering */
+const CATCH_ALL = ["Thai", "Arabic"];
+
+/** letters of one script in the words read with real certainty */
+const sureLetters = (pass: Pass, script: string) =>
+  wordsOf(pass.blocks)
+    .filter((w) => w.confidence >= 80 && scriptShare(w.text, script))
+    .reduce((n, w) => n + w.text.replace(/[^\p{L}]/gu, "").length, 0);
+
+/** whether a fair share of what was read surely belongs to a script */
+function isThere(pass: Pass, script: string): boolean {
+  const sure = wordsOf(pass.blocks).filter((w) => w.confidence >= 70);
+  const letters = (words: typeof sure) => words.reduce((n, w) => n + w.text.replace(/[^\p{L}]/gu, "").length, 0);
+  // Latin words read by a Cyrillic or Greek model come out in look-alike letters: those do not count
+  const own = script === "Cyrillic" ? /[бгджзийлпфцчшщъыьэюя]/iu : script === "Greek" ? /[γδζθλξπσφψω]/iu : /./u;
+  return letters(sure.filter((w) => scriptShare(w.text, script) && own.test(w.text))) > letters(sure) * 0.12;
+}
+
+/** whether most letters of a word belong to a script; scripts without a Unicode name of their own pass */
+function scriptShare(text: string, script: string): boolean {
+  const name = ({ Han: "Han", Japanese: "Hiragana", Hangul: "Hangul" } as Record<string, string>)[script] ?? script;
+  let own: RegExp;
+  try {
+    own = new RegExp(`\\p{Script_Extensions=${name}}`, "u");
+  } catch {
+    return true;
+  }
+  const letters = [...text.replace(/[^\p{L}]/gu, "")];
+  return letters.length > 0 && letters.filter((c) => own.test(c)).length >= letters.length * 0.6;
 }
 
 /** boxes of lines read with little confidence, when enough others were read well */
