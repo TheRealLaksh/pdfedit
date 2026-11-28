@@ -190,15 +190,18 @@ export function useViewport(scroller: RefObject<HTMLDivElement | null>, content:
     setZoomApi({
       getScale: () => scaleAt(),
       zoomBy: (factor) => zoomTo(scaleAt() * factor),
-      zoomAround: (scale, page, point) => {
+      zoomAt: (scale, page, point, clientX, clientY) => {
         const el = scroller.current;
         if (!el) return;
+        const r = el.getBoundingClientRect();
+        // away from the edges (and the keyboard), so the surroundings stay readable
+        const within = (v: number, size: number, low: number, high: number) => Math.max(size * low, Math.min(size * high, v));
         zoomTo(scale, undefined, undefined, {
           page,
           px: point[0],
           py: point[1],
-          vx: el.clientWidth / 2,
-          vy: el.clientHeight * 0.35,
+          vx: within(clientX - r.left, el.clientWidth, 0.25, 0.75),
+          vy: within(clientY - r.top, el.clientHeight, 0.15, 0.5),
         });
       },
     });
@@ -329,6 +332,34 @@ export function useViewport(scroller: RefObject<HTMLDivElement | null>, content:
   useEffect(() => () => clearTimeout(settleTimer.current), []);
 
   const inset = useViewer((s) => s.bottomInset);
+
+  /*
+   * The extra scroll room made for the keyboard is given back only as far as it is out of sight, so the page
+   * never jumps when a field closes: it shrinks while the user scrolls up.
+   */
+  const editing = useStore((s) => s.editing !== null);
+  const switching = useViewer((s) => s.switching);
+  const baseHeight = layout.height;
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el || editing || switching || !inset) return;
+    let settledDown = false;
+    const trim = () => {
+      const needed = Math.max(0, Math.ceil(el.scrollTop + el.clientHeight - baseHeight));
+      if (needed < useViewer.getState().bottomInset) useViewer.setState({ bottomInset: needed });
+    };
+    // not at once: the keyboard is still on its way down and the view still short
+    const timer = setTimeout(() => {
+      settledDown = true;
+      trim();
+    }, 900);
+    const onScroll = () => settledDown && trim();
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      clearTimeout(timer);
+      el.removeEventListener("scroll", onScroll);
+    };
+  }, [scroller, editing, switching, inset, baseHeight]);
   return {
     layout: inset ? { ...layout, height: layout.height + inset } : layout,
     width: size.width,

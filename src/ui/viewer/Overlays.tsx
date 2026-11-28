@@ -1,6 +1,6 @@
 /** Floating prompts and contextual action bars over the viewer. */
 import {
-  ArrowCounterClockwiseIcon, CheckIcon, ImageSquareIcon, PencilSimpleIcon, ScanIcon, TrashIcon, XIcon,
+  ArrowCounterClockwiseIcon, ArrowsInIcon, CheckIcon, ImageSquareIcon, PencilSimpleIcon, ScanIcon, TrashIcon, XIcon,
 } from "@phosphor-icons/react";
 import { useEffect, useState, type ReactNode } from "react";
 import { engine } from "../../engine/client";
@@ -263,6 +263,29 @@ function Hint() {
   );
 }
 
+/**
+ * Phones: the view stays magnified after editing (it never jumps back on its own), so the way back to the
+ * whole page is one tap away.
+ */
+function FitButton() {
+  const compact = useCompact();
+  const zoomed = useStore((s) => s.zoom !== "fit");
+  if (!compact || !zoomed) return null;
+  return (
+    <button
+      type="button"
+      className="pv-fit"
+      data-pv-ui=""
+      onClick={() => {
+        useViewer.setState({ bottomInset: 0 });
+        useStore.getState().setZoom("fit");
+      }}
+    >
+      <ArrowsInIcon aria-hidden /> Fit page
+    </button>
+  );
+}
+
 /** most actions sit at the top: the shell's tool options own the bottom edge */
 export function ActionOverlay() {
   const tool = useStore((s) => s.tool);
@@ -270,6 +293,9 @@ export function ActionOverlay() {
   const selection = useStore((s) => !!s.selection);
   const redacting = useViewer((s) => Object.keys(s.redactions).length > 0);
   const inking = useViewer((s) => !!s.ink);
+  const notice = useViewer((s) => s.hint);
+  const switching = useViewer((s) => s.switching);
+  if (switching) return null;
   if (editing) {
     // someone who has opened a line does not need to be told how
     hinted = true;
@@ -278,5 +304,16 @@ export function ActionOverlay() {
   if (redacting) return <RedactionBar />;
   if (selection) return <SelectionBar />;
   if (inking) return <InkBar />;
-  return tool === "edit-text" ? <Hint /> : null;
+  if (notice)
+    return (
+      <div className="pv-hint" role="status">
+        {notice}
+      </div>
+    );
+  return tool === "edit-text" ? (
+    <>
+      <Hint />
+      <FitButton />
+    </>
+  ) : null;
 }

@@ -1,5 +1,5 @@
 /** The editor for one line (or one new/added text box): owns the draft and commits only what changed. */
-import { ArrowsOutCardinalIcon, CheckIcon, TextAaIcon, XIcon } from "@phosphor-icons/react";
+import { ArrowsOutCardinalIcon, CheckIcon, XIcon } from "@phosphor-icons/react";
 import { useContext, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { engine } from "../../../engine/client";
@@ -7,15 +7,16 @@ import type { Align, LineEdit, PageObject, Point, Rect, TextLine, TextStyle } fr
 import { useStore } from "../../../store";
 import { ViewerContext } from "../context";
 import { useCompact } from "../device";
-import { lineFrame, MAX_SCALE } from "../geometry";
+import { fromLocal, lineFrame, MAX_SCALE } from "../geometry";
 import { samplePaper } from "../canvasRegistry";
 import { loadPageData, peekPageData } from "../pageData";
-import { zoomAround } from "../viewerApi";
+import { zoomAt } from "../viewerApi";
 import { addGhost, removeGhost, useViewer, type TextDraft } from "../viewerStore";
-import { editKey, editors, focusField, type ActiveEditor } from "./controller";
+import { editKey, editors, focusField, forgetTap, type ActiveEditor } from "./controller";
 import { Dock } from "./Dock";
 import { lineBox, Preview, type PreviewSpec } from "./Preview";
-import { StyleBar } from "./StyleBar";
+import { PhoneBar } from "./PhoneBar";
+import { StyleBar, type StyleBarProps } from "./StyleBar";
 import { measureText, offsetAtX } from "./textMetrics";
 
 type TextObject = Extract<PageObject, { kind: "text" }>;
@@ -73,9 +74,6 @@ export function TextEditor({ page, lineId, scale }: { page: number; lineId: stri
   ) : null;
 }
 
-/* the zoom the view had before the editor magnified small text */
-let zoomMemory: { before: number | "fit"; set: number; session: number } | null = null;
-
 interface Draft {
   text: string;
   patch: Partial<TextStyle>;
@@ -125,8 +123,10 @@ function Session({ id, page, lineId, source, revision, scale }: {
   const [initial] = useState(() => initialDraft(source));
   const [draft, setDraft] = useState(initial.draft);
   const [short, setShort] = useState(false);
-  const [showTools, setShowTools] = useState(false);
+  const [tiny, setTiny] = useState(false);
   const [moving, setMoving] = useState(false);
+  /** where on the line (points along it) the finger that opened the editor was */
+  const [tappedAt] = useState(() => (editors.caret?.key === id ? editors.caret.u : null));
   const field = useRef<HTMLTextAreaElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const dock = useRef<HTMLDivElement>(null);
@@ -150,7 +150,10 @@ function Session({ id, page, lineId, source, revision, scale }: {
       return { frame, scaleX, cover: samplePaper(page, pageWidth, line.rect) };
     }
     if (source.kind === "object") return { cover: samplePaper(page, pageWidth, source.object.rect) };
-    return { cover: null };
+    // phones: a new box wraps within what the screen shows (at the zoom it will be typed at)
+    const typedAt = Math.max(scale, original.size * scale < 12 ? 15 / original.size : 0);
+    const screen = compact ? scroller.current?.clientWidth : undefined;
+    return { cover: null, maxWidth: screen ? (screen - 48) / typedAt : undefined };
   });
 
   /* ---------- what is drawn over the page ---------- */
@@ -163,7 +166,7 @@ function Session({ id, page, lineId, source, revision, scale }: {
     }
     const r = (source as Extract<Source, { kind: "new" }>).draft.rect;
     const widest = Math.max(0, ...draft.text.split("\n").map((t) => measureText(t, shown, shown.size * REF).width / REF));
-    const max = Math.max(60, pageWidth - r[0] - 4);
+    const max = Math.max(60, Math.min(pageWidth - r[0] - 4, geometry.maxWidth ?? Infinity));
     const width = Math.min(max, Math.max(Math.min(120, max), widest * 1.12 + shown.size * 0.8));
     const lines = draft.text.split("\n").length;
     const h = box.current ? box.current.offsetHeight / scale : lines * shown.size * LINE_HEIGHT;
@@ -265,6 +268,16 @@ function Session({ id, page, lineId, source, revision, scale }: {
     return pending;
   };
 
+  /** Cancel and Done, from a button or a key */
+  const dismiss = () => {
+    forgetTap();
+    close();
+  };
+  const finish = () => {
+    forgetTap();
+    commit();
+  };
+
   const remove = () => {
     if (finished.current) return;
     const { spec } = latest.current;
@@ -301,17 +314,26 @@ function Session({ id, page, lineId, source, revision, scale }: {
     const had = document.activeElement === el;
     cancelFocus.current();
     focusing.current = true;
-    cancelFocus.current = focusField(el, () => {
-      focusing.current = false;
-      const at = wanted === undefined ? null : offsetFor(wanted);
-      if (at !== null) el.setSelectionRange(at, at);
-      else if (!had) el.setSelectionRange(el.value.length, el.value.length);
-      setCaret(el.selectionEnd);
-    });
+    cancelFocus.current = focusField(
+      el,
+      () => {
+        focusing.current = false;
+        const at = wanted === undefined ? null : offsetFor(wanted);
+        if (at !== null) el.setSelectionRange(at, at);
+        else if (!had) el.setSelectionRange(el.value.length, el.value.length);
+        setCaret(el.selectionEnd);
+      },
+      () => compact && reveal(true),
+    );
   };
 
-  const api = useRef<ActiveEditor>({ key: id, commit, cancel: close, focus });
-  Object.assign(api.current, { commit, cancel: close, focus });
+  const reaches = (x: number, y: number) => {
+    const r = box.current?.getBoundingClientRect();
+    return !!r && x >= r.left - 32 && x <= r.right + 32 && y >= r.top - 14 && y <= r.bottom + 14;
+  };
+
+  const api = useRef<ActiveEditor>({ key: id, commit, cancel: close, focus, reaches });
+  Object.assign(api.current, { commit, cancel: close, focus, reaches });
 
   useLayoutEffect(() => {
     const mine = api.current;
@@ -350,74 +372,97 @@ function Session({ id, page, lineId, source, revision, scale }: {
 
   /* ---------- keeping the text in view ---------- */
 
-  const ensureVisible = useRef<(force: boolean) => void>(() => {});
-  const frame = useRef({ id: 0, force: false });
-  ensureVisible.current = (force) => {
-    frame.current.force ||= force;
+  /**
+   * Scroll just as far as needed for the line being typed to be seen above the keyboard. `opening`: also
+   * bring the whole line in sideways when it fits. The desktop view centres the line instead.
+   */
+  const reveal = (opening: boolean) => {
+    const el = scroller.current;
+    if (!el || !box.current) return;
+    const view = el.getBoundingClientRect();
+    const vvTop = window.visualViewport?.offsetTop ?? 0;
+    const bar = compact ? dock.current?.getBoundingClientRect() : undefined;
+    // a corner card leaves the left of the view free down to the keyboard
+    const corner = !!bar && bar.width < view.width * 0.6;
+    const dockTop = bar && !corner ? bar.top : view.bottom;
+    const right = corner ? bar.left : view.right;
+    const whole = box.current.getBoundingClientRect();
+    const marker = box.current.parentElement?.querySelector("[data-pv-caret]")?.getBoundingClientRect();
+    const target = marker ?? whole;
+    const top = Math.max(view.top, vvTop);
+    const bottom = Math.max(top + 24, Math.min(view.bottom, dockTop));
+    const centre = !compact && opening;
+    if (centre || target.top < top + 6 || target.bottom > bottom - 6)
+      el.scrollTop += (target.top + target.bottom) / 2 - (top + bottom) / 2;
+    const margin = compact ? 12 : 16;
+    // a new text box that still fits is kept wholly on screen while it grows
+    const growing = compact && source.kind !== "line";
+    if ((opening || growing) && whole.width <= right - view.left - margin * 2) {
+      if (!compact && (whole.left < view.left + 12 || whole.right > view.right - 12))
+        el.scrollLeft += (whole.left + whole.right) / 2 - (view.left + view.right) / 2;
+      else if (whole.left < view.left + margin) el.scrollLeft += whole.left - view.left - margin;
+      else if (whole.right > right - margin) el.scrollLeft += whole.right - right + margin;
+    } else if (marker && compact) {
+      // only when the caret leaves the screen, and then only as far as gives it some room again
+      if (marker.left < view.left + 8) el.scrollLeft += marker.left - view.left - 48;
+      else if (marker.left > right - 16) el.scrollLeft += marker.left - right + 56;
+    } else if (marker && (marker.left < view.left + 36 || marker.left > view.right - 36)) {
+      el.scrollLeft += marker.left - (view.left + view.width * 0.6);
+    }
+  };
+
+  const ensureVisible = useRef<(opening: boolean) => void>(() => {});
+  const frame = useRef({ id: 0, opening: false });
+  ensureVisible.current = (opening) => {
+    frame.current.opening ||= opening;
     cancelAnimationFrame(frame.current.id);
     frame.current.id = requestAnimationFrame(() => {
       const el = scroller.current;
-      if (!el || !box.current) return;
-      const view = el.getBoundingClientRect();
-      const vvTop = window.visualViewport?.offsetTop ?? 0;
-      const dockTop = compact && dock.current ? dock.current.getBoundingClientRect().top : view.bottom;
-      const inset = compact ? Math.max(0, Math.round(view.bottom - dockTop)) : 0;
-      if (useViewer.getState().bottomInset !== inset) useViewer.setState({ bottomInset: inset });
+      if (!el) return;
+      // room to lift the last lines of the document above the keyboard
+      if (compact && dock.current) {
+        const covered = Math.max(0, el.getBoundingClientRect().bottom - dock.current.getBoundingClientRect().top);
+        const inset = Math.round(covered) + 420;
+        if (useViewer.getState().bottomInset < inset) useViewer.setState({ bottomInset: inset });
+      }
       // the extra scroll room appears with the next React render
       frame.current.id = requestAnimationFrame(() => {
-        if (!box.current) return;
-        const forced = frame.current.force;
-        frame.current.force = false;
-        const whole = box.current.getBoundingClientRect();
-        const marker = box.current.parentElement?.querySelector("[data-pv-caret]")?.getBoundingClientRect();
-        const target = marker ?? whole;
-        const top = Math.max(view.top, vvTop);
-        const bottom = Math.max(top + 24, Math.min(view.bottom, dockTop));
-        if (forced || target.top < top + 6 || target.bottom > bottom - 6)
-          el.scrollTop += (target.top + target.bottom) / 2 - (top + bottom) / 2;
-        if (forced && whole.width <= view.width - 32) {
-          if (whole.left < view.left + 12 || whole.right > view.right - 12)
-            el.scrollLeft += (whole.left + whole.right) / 2 - (view.left + view.right) / 2;
-        } else if (marker && (marker.left < view.left + 36 || marker.left > view.right - 36)) {
-          el.scrollLeft += marker.left - (view.left + view.width * 0.6);
-        }
+        const first = frame.current.opening;
+        frame.current.opening = false;
+        reveal(first);
       });
     });
   };
 
-  // phones: magnify tiny text so the result can be read while typing
+  /** the editor itself changed the zoom: show the line again once it is laid out */
+  const zoomed = useRef(false);
+  // phones: magnify tiny text so it can be read while typing. The view then stays as it is: no jump back.
   useEffect(() => {
-    if (!compact) return;
-    const px = original.size * scale;
-    if (px < 13) {
-      const next = Math.min(MAX_SCALE, 15 / original.size, scale * 3.2);
-      const centre: Point =
-        source.kind === "line"
-          ? source.line.origin
-          : source.kind === "object"
-            ? [source.object.rect[0], source.object.rect[1]]
-            : [source.draft.rect[0], source.draft.rect[1]];
-      zoomMemory = { before: zoomMemory?.before ?? useStore.getState().zoom, set: next, session: docSession };
-      zoomAround(next, page, centre);
-    }
+    if (!compact || original.size * scale >= 12) return;
+    const next = Math.min(MAX_SCALE, 15 / original.size, scale * 3.5);
+    const f = geometry.frame;
+    const point: Point =
+      source.kind === "line"
+        ? fromLocal(f!, [tappedAt ?? f!.uMin, (f!.vMin + f!.vMax) / 2])
+        : source.kind === "object"
+          ? [source.object.rect[0], source.object.rect[1]]
+          : [source.draft.rect[0], source.draft.rect[1]];
+    const sheet = box.current?.closest(".pv-page")?.getBoundingClientRect();
+    if (!sheet) return;
+    const pageHeight = useStore.getState().doc!.pages[page]!.height;
+    zoomed.current = true;
+    zoomAt(next, page, point, sheet.left + (point[0] / pageWidth) * sheet.width, sheet.top + (point[1] / pageHeight) * sheet.height);
   }, []);
 
-  useEffect(
-    () => () => {
-      cancelAnimationFrame(frame.current.id);
-      // after a tick: another editor may have opened in the meantime
-      setTimeout(() => {
-        const s = useStore.getState();
-        if (s.editing) return;
-        useViewer.setState({ bottomInset: 0 });
-        if (zoomMemory && s.session === zoomMemory.session && s.zoom === zoomMemory.set) s.setZoom(zoomMemory.before);
-        zoomMemory = null;
-      });
-    },
-    [],
-  );
-
-  useEffect(() => ensureVisible.current(true), [scale, compact]);
+  useEffect(() => () => cancelAnimationFrame(frame.current.id), []);
+  const shownOnce = useRef(false);
+  useEffect(() => {
+    // on phones a pinch by the user is left alone
+    if (compact && shownOnce.current && !zoomed.current) return;
+    shownOnce.current = true;
+    zoomed.current = false;
+    ensureVisible.current(true);
+  }, [scale, compact]);
   useEffect(() => ensureVisible.current(false), [draft.text, caret, draft.offset, style.size]);
 
   /* ---------- desktop floating bar ---------- */
@@ -487,8 +532,9 @@ function Session({ id, page, lineId, source, revision, scale }: {
     dir: "auto" as const,
     spellCheck: false,
     autoComplete: "off",
-    autoCorrect: "off",
-    autoCapitalize: "off",
+    // new writing gets the keyboard's help; words already in a document are not "corrected" behind the back
+    autoCorrect: source.kind === "line" ? "off" : "on",
+    autoCapitalize: source.kind === "line" ? "off" : "sentences",
     enterKeyHint: multiline ? ("enter" as const) : ("done" as const),
     "aria-label": source.kind === "line" ? "Edit text" : "Text",
     placeholder: source.kind === "new" ? "Type here" : undefined,
@@ -507,57 +553,49 @@ function Session({ id, page, lineId, source, revision, scale }: {
       if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
-        close();
+        dismiss();
       } else if (e.key === "Enter" && (!multiline || e.ctrlKey || e.metaKey)) {
         e.preventDefault();
-        commit();
+        finish();
       }
     },
   };
 
-  // the compact field grows to three lines
-  useLayoutEffect(() => {
+  // some on-screen keyboards send Enter only as "insert a line break", without a usable key event
+  useEffect(() => {
     const el = field.current;
-    if (!compact || !el) return;
-    el.style.height = "0";
-    el.style.height = `${el.scrollHeight + 2}px`;
-  });
+    if (!el || multiline) return;
+    const onBeforeInput = (e: InputEvent) => {
+      if (e.inputType !== "insertLineBreak" && e.inputType !== "insertParagraph") return;
+      e.preventDefault();
+      api.current.commit();
+    };
+    el.addEventListener("beforeinput", onBeforeInput);
+    return () => el.removeEventListener("beforeinput", onBeforeInput);
+  }, [multiline]);
 
-  const styleBar = (
-    <StyleBar
-      style={style}
-      align={draft.align}
-      defaultFont={source.kind === "new" ? `Default (${original.family})` : `Original (${original.family || "document font"})`}
-      onStyle={(p) => {
-        setDraft((d) => ({ ...d, patch: { ...d.patch, ...p } }));
-        if ("fontChoice" in p) field.current?.focus({ preventScroll: true });
-      }}
-      onAlign={(align) => setDraft((d) => ({ ...d, align }))}
-      shrink={draft.shrink}
-      onShrink={source.kind === "line" ? (shrink) => setDraft((d) => ({ ...d, shrink })) : undefined}
-      onNudge={([x, y]) => setDraft((d) => ({ ...d, offset: [d.offset[0] + x, d.offset[1] + y] }))}
-      onResetMove={() => setDraft((d) => ({ ...d, offset: [0, 0] }))}
-      moved={moved}
-      onDelete={remove}
-      moving={moving}
-      onMoving={setMoving}
-      oneRow={compact && short}
-    />
-  );
+  const controls: StyleBarProps = {
+    style,
+    align: draft.align,
+    defaultFont: source.kind === "new" ? `Default (${original.family})` : `Original (${original.family || "document font"})`,
+    onStyle: (p) => {
+      setDraft((d) => ({ ...d, patch: { ...d.patch, ...p } }));
+      if ("fontChoice" in p) field.current?.focus({ preventScroll: true });
+    },
+    onAlign: (align) => setDraft((d) => ({ ...d, align })),
+    shrink: draft.shrink,
+    onShrink: source.kind === "line" ? (shrink) => setDraft((d) => ({ ...d, shrink })) : undefined,
+    onNudge: ([x, y]) => setDraft((d) => ({ ...d, offset: [d.offset[0] + x, d.offset[1] + y] })),
+    onResetMove: () => setDraft((d) => ({ ...d, offset: [0, 0] })),
+    moved,
+    onDelete: remove,
+    moving,
+    onMoving: setMoving,
+  };
 
-  // short screens keep the dock to one row: the style and move controls take the field's place
-  const swapped = compact && short && (showTools || moving);
-
-  const cancelButton = (
-    <button type="button" className="pv-btn" aria-label="Cancel" title="Cancel (Esc)" onMouseDown={(e) => e.preventDefault()} onClick={close} data-testid="editor-cancel">
-      <XIcon />
-    </button>
-  );
-  const doneButton = (
-    <button type="button" className="pv-btn pv-btn-primary" aria-label="Done" title="Done (Enter)" onMouseDown={(e) => e.preventDefault()} onClick={commit} data-testid="editor-done">
-      <CheckIcon weight="bold" />
-    </button>
-  );
+  // untouched text shows the page itself. Under a finger the caret and the selection must sit on the very
+  // letters that are seen, so a stand-in font that runs differently is shown from the start.
+  const faithful = source.kind === "line" && Math.abs(geometry.scaleX! - 1) < 0.05;
 
   return (
     <div className="pv-editor" data-pv-ui="">
@@ -566,9 +604,10 @@ function Session({ id, page, lineId, source, revision, scale }: {
         scale={scale}
         boxRef={box}
         active
-        field={compact ? undefined : fieldProps}
-        ghostText={!dirty && source.kind !== "new"}
-        caret={compact ? caret : null}
+        field={fieldProps}
+        ghostText={!dirty && source.kind !== "new" && (!compact || faithful)}
+        caret={caret}
+        touch={compact}
       >
         {/* on phones the handle would hide the next line: it appears with the move controls */}
         {(!compact || moving) && (
@@ -581,44 +620,36 @@ function Session({ id, page, lineId, source, revision, scale }: {
         <Dock
           dockRef={dock}
           short={short}
+          tiny={tiny}
           onMoved={() => {
-            // landscape phones with the keyboard up: one row only
-            setShort((window.visualViewport?.height ?? window.innerHeight) < 280);
-            ensureVisible.current(true);
+            const height = window.visualViewport?.height ?? window.innerHeight;
+            // landscape phones with the keyboard up: one row only, or just a corner card
+            setShort(height < 330);
+            setTiny(height < 130);
+            ensureVisible.current(false);
           }}
         >
-          {!short && styleBar}
-          <div className="pv-field-row">
-            {cancelButton}
-            {swapped && <div className="pv-field-swap">{styleBar}</div>}
-            {/* stays mounted and focused while swapped out, so the keyboard does not close */}
-            <textarea {...fieldProps} className={swapped ? "pv-field pv-field-away" : "pv-field"} />
-            {short && (
-              <button
-                type="button"
-                className="pv-btn"
-                aria-label="Text style"
-                aria-pressed={swapped}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  setShowTools(!swapped);
-                  setMoving(false);
-                }}
-              >
-                <TextAaIcon />
-              </button>
-            )}
-            {doneButton}
-          </div>
+          <PhoneBar
+            {...controls}
+            short={short}
+            tiny={tiny}
+            refocus={() => field.current?.focus({ preventScroll: true })}
+            onCancel={dismiss}
+            onDone={finish}
+          />
         </Dock>
       ) : (
         root.current &&
         createPortal(
           <div ref={bar} className="pv-floating" data-pv-ui="" data-testid="editor-bar">
-            {styleBar}
+            <StyleBar {...controls} />
             <div className="pv-floating-actions">
-              {cancelButton}
-              {doneButton}
+              <button type="button" className="pv-btn" aria-label="Cancel" title="Cancel (Esc)" onMouseDown={(e) => e.preventDefault()} onClick={dismiss} data-testid="editor-cancel">
+                <XIcon />
+              </button>
+              <button type="button" className="pv-btn pv-btn-primary" aria-label="Done" title="Done (Enter)" onMouseDown={(e) => e.preventDefault()} onClick={finish} data-testid="editor-done">
+                <CheckIcon weight="bold" />
+              </button>
             </div>
           </div>,
           root.current,

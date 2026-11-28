@@ -2,7 +2,8 @@
 import { useEffect, useRef } from "react";
 import { useStore } from "../../store";
 import { ViewerContext } from "./context";
-import { cancelQueuedTap, editors } from "./editor/controller";
+import { cancelQueuedTap, editors, isEcho } from "./editor/controller";
+import { SwitchingDock } from "./editor/PhoneBar";
 import { boundsOf, quadPoints, rectCentre } from "./geometry";
 import { ActionOverlay, PageNotice } from "./Overlays";
 import { PageView } from "./PageView";
@@ -164,7 +165,7 @@ export function Viewer() {
           aria-label="Document pages"
           onClick={(e) => {
             // a tap on the empty space around the pages
-            if (e.target !== e.currentTarget && e.target !== content.current) return;
+            if ((e.target !== e.currentTarget && e.target !== content.current) || isEcho(e)) return;
             cancelQueuedTap();
             editors.current?.commit();
             useStore.getState().select(null);
@@ -178,6 +179,7 @@ export function Viewer() {
         </div>
         <PageNotice />
         <ActionOverlay />
+        <SwitchingDock />
       </div>
     </ViewerContext.Provider>
   );

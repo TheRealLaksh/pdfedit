@@ -1,4 +1,4 @@
-/** Font, size, colour and layout controls of the text editor. */
+/** Font, size, colour and layout controls of the text editor (the desktop bar; phones use PhoneBar). */
 import {
   ArrowCounterClockwiseIcon, ArrowDownIcon, ArrowLeftIcon, ArrowRightIcon, ArrowUpIcon, ArrowsInLineHorizontalIcon,
   ArrowsOutCardinalIcon, MinusIcon, PlusIcon, TextAlignCenterIcon, TextAlignJustifyIcon, TextAlignLeftIcon,
@@ -12,7 +12,7 @@ import { hexToRgb, rgbToHex } from "../geometry";
 
 let fontCache: { session: number; list: Promise<FontChoice[]> } | null = null;
 
-function useFonts(): FontChoice[] {
+export function useFonts(): FontChoice[] {
   const session = useStore((s) => s.session);
   // the shell's font panel may add uploads while a document is open
   const panel = useStore((s) => s.panel);
@@ -32,14 +32,14 @@ function useFonts(): FontChoice[] {
   return fonts;
 }
 
-const GROUPS: [FontChoice["source"], string][] = [
+export const GROUPS: [FontChoice["source"], string][] = [
   ["document", "In this document"],
   ["user", "Your fonts"],
   ["builtin", "Standard"],
   ["web", "More fonts"],
 ];
 
-const ALIGN: [Align, string, ReactNode][] = [
+export const ALIGN: [Align, string, ReactNode][] = [
   ["left", "Align left", <TextAlignLeftIcon key="l" />],
   ["center", "Align centre", <TextAlignCenterIcon key="c" />],
   ["right", "Align right", <TextAlignRightIcon key="r" />],
@@ -63,8 +63,6 @@ export interface StyleBarProps {
   /** the move controls are open */
   moving: boolean;
   onMoving(value: boolean): void;
-  /** very little height: the move controls replace the style controls instead of adding a row */
-  oneRow?: boolean;
 }
 
 /** marks the side where more controls are scrolled out of sight, so that edge can be faded */
@@ -88,6 +86,43 @@ function useOverflowHint() {
     };
   });
   return strip;
+}
+
+/** the size as the bar shows it: steps count from this, so one tap always changes what is seen */
+export const shownSize = (size: number) => Math.round(size * 10) / 10;
+
+/** nudge buttons that repeat while held */
+export function useNudge(onNudge: (delta: Point) => void) {
+  const repeat = useRef<{ timer?: ReturnType<typeof setTimeout> }>({});
+  const latest = useRef(onNudge);
+  latest.current = onNudge;
+  const stop = () => clearTimeout(repeat.current.timer);
+  useEffect(() => stop, []);
+  return (delta: Point, label: string, icon: ReactNode, extra = "") => (
+    <button
+      type="button"
+      className={`pv-btn ${extra}`}
+      aria-label={label}
+      title={label}
+      onPointerDown={() => {
+        latest.current(delta);
+        const again = (wait: number) => {
+          repeat.current.timer = setTimeout(() => {
+            latest.current(delta);
+            again(70);
+          }, wait);
+        };
+        again(400);
+      }}
+      onPointerUp={stop}
+      onPointerLeave={stop}
+      onPointerCancel={stop}
+      onClick={(e) => e.detail === 0 && latest.current(delta)}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      {icon}
+    </button>
+  );
 }
 
 /** buttons must not take the focus: the phone keyboard would close */
@@ -121,45 +156,15 @@ export function StyleBar(props: StyleBarProps) {
   const fonts = useFonts();
   const { moving } = props;
   const [sizeText, setSizeText] = useState<string | null>(null);
-  const repeat = useRef<{ timer?: ReturnType<typeof setTimeout> }>({});
-  const stop = () => clearTimeout(repeat.current.timer);
-  useEffect(() => stop, []);
-
   const setSize = (size: number) => onStyle({ size: Math.round(Math.min(600, Math.max(2, size)) * 10) / 10 });
-  const nudge = (delta: Point, label: string, icon: ReactNode) => (
-    <button
-      type="button"
-      className="pv-btn"
-      aria-label={label}
-      title={label}
-      onPointerDown={() => {
-        props.onNudge(delta);
-        const again = (wait: number) => {
-          repeat.current.timer = setTimeout(() => {
-            props.onNudge(delta);
-            again(70);
-          }, wait);
-        };
-        again(400);
-      }}
-      onPointerUp={stop}
-      onPointerLeave={stop}
-      onPointerCancel={stop}
-      onClick={(e) => e.detail === 0 && props.onNudge(delta)}
-      onContextMenu={(e) => e.preventDefault()}
-    >
-      {icon}
-    </button>
-  );
+  const nudge = useNudge(props.onNudge);
   const alignIndex = ALIGN.findIndex(([a]) => a === align);
   const current = ALIGN[Math.max(0, alignIndex)]!;
   const strip = useOverflowHint();
-  const onlyMove = !!props.oneRow && moving;
 
   return (
     <div className="pv-style" onMouseDown={keepFocus}>
-      {/* hidden rather than removed, so the font list and scroll position survive */}
-      <div ref={strip} className="pv-tools" role="toolbar" aria-label="Text style" hidden={onlyMove}>
+      <div ref={strip} className="pv-tools" role="toolbar" aria-label="Text style">
         <select
           className="pv-select"
           aria-label="Font"
@@ -181,7 +186,7 @@ export function StyleBar(props: StyleBarProps) {
           })}
         </select>
         <div className="pv-stepper">
-          <Tool label="Smaller text" onClick={() => setSize(Math.ceil(style.size) - 1)}>
+          <Tool label="Smaller text" onClick={() => setSize(Math.ceil(shownSize(style.size)) - 1)}>
             <MinusIcon />
           </Tool>
           <input
@@ -198,7 +203,7 @@ export function StyleBar(props: StyleBarProps) {
             onBlur={() => setSizeText(null)}
             onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
           />
-          <Tool label="Larger text" onClick={() => setSize(Math.floor(style.size) + 1)}>
+          <Tool label="Larger text" onClick={() => setSize(Math.floor(shownSize(style.size)) + 1)}>
             <PlusIcon />
           </Tool>
         </div>
@@ -244,11 +249,6 @@ export function StyleBar(props: StyleBarProps) {
           <button type="button" className="pv-btn pv-btn-text" disabled={!props.moved} onClick={props.onResetMove}>
             <ArrowCounterClockwiseIcon /> Reset
           </button>
-          {onlyMove && (
-            <Tool label="Move" pressed onClick={() => props.onMoving(false)}>
-              <ArrowsOutCardinalIcon />
-            </Tool>
-          )}
         </div>
       )}
     </div>

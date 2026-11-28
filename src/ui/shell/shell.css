@@ -853,6 +853,27 @@ h1.sh-filename {
   background: var(--accent-soft);
 }
 
+/*
+ * Only the page zooms (the viewer does that itself): a pinch on the bars or sheets around it must not magnify
+ * the whole app and push its controls off the screen. List only elements that really take touches: Chrome
+ * counts touch-action even on a see-through (pointer-events: none) layer or on html, and the viewer's own
+ * pinch then stops working.
+ */
+:where(.sh-top, .sh-bottom, .sh-modal, .sh-modal *, .sh-options, .sh-options *, .sh-chips > *, .sh-findcard, .sh-findcard *, .sh-toast, .sh-toast *, .pv-dock, .pv-dock *, .pv-bar, .pv-notice, .pv-fit),
+.sh-busy[data-visible]:not([data-quiet]) {
+  touch-action: pan-x pan-y;
+}
+/* the keyboard is up: the tool bar would only take away room from the page or the sheet */
+html[data-keyboard] .sh-bottom {
+  display: none;
+}
+/* a phone held sideways while typing: every pixel goes to the page */
+@media (max-height: 420px) {
+  [data-layout="phone"][data-editing] .sh-top {
+    display: none;
+  }
+}
+
 /* ---------- floating bars ---------- */
 
 .sh-options,
@@ -904,6 +925,27 @@ h1.sh-filename {
 .sh-options-row > * {
   flex: none;
 }
+/* phones held upright: the controls wrap, so none is out of sight */
+@media (min-height: 480px) {
+  [data-layout="phone"] .sh-options {
+    width: auto;
+    margin-inline: var(--space-2);
+    max-width: 520px;
+  }
+  [data-layout="phone"] .sh-options-row {
+    flex-wrap: wrap;
+    row-gap: var(--space-1);
+    overflow-x: visible;
+  }
+  /* width and opacity share a row, fill takes the last one: the card stays low */
+  [data-layout="phone"] .sh-options-row > div.sh-inline {
+    order: 1;
+  }
+  /* the controls explain themselves: the hint would only push the card up the page */
+  [data-layout="phone"] .sh-options:has(.sh-options-row) .sh-options-head p span {
+    display: none;
+  }
+}
 [data-layout="desktop"] .sh-options {
   max-width: min(660px, calc(100% - 16px));
 }
@@ -942,6 +984,10 @@ h1.sh-filename {
   .sh-options-row {
     flex: 0 1 auto;
     min-width: 0;
+    /* one row that scrolls: the faded edge says there is more */
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+    padding-right: 28px;
   }
 }
 .sh-stepper {
@@ -1337,6 +1383,41 @@ body:has(.sh-findcard) .sh-toasts {
   overflow-wrap: anywhere;
 }
 
+/* phones: a note must never sit on the page for long, least of all on the line being typed */
+@media (max-width: 699px), (pointer: coarse) {
+  .sh-toast {
+    font-size: 13px;
+  }
+  /* one at a time: the newest */
+  .sh-toasts li:not(:last-child):not(.sh-toast-error) {
+    display: none;
+  }
+  /* while typing it keeps to the height of the top bar, in one line */
+  body:has(.sh-app[data-editing]) .sh-toasts {
+    top: calc(var(--safe-top) + 4px);
+  }
+  body:has(.sh-app[data-editing]) .sh-toast-body p {
+    display: -webkit-box;
+    overflow: hidden;
+    padding: 0;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    line-height: 1.3;
+  }
+  body:has(.sh-app[data-editing]) .sh-toast-body {
+    padding: 4px 0;
+    align-self: center;
+  }
+  body:has(.sh-app[data-editing]) .sh-toast-body .sh-link {
+    display: none;
+  }
+  body:has(.sh-app[data-editing]) .sh-toast > svg {
+    align-self: center;
+    margin: 0;
+  }
+}
+
 .sh-busy {
   position: fixed;
   inset: 0;
@@ -1349,6 +1430,22 @@ body:has(.sh-findcard) .sh-toasts {
 .sh-busy[data-visible] {
   background: color-mix(in srgb, var(--scrim) 60%, transparent);
   pointer-events: auto;
+}
+/* a small note under the top bar; the page stays usable */
+.sh-busy[data-quiet] {
+  align-items: start;
+  padding-top: calc(var(--safe-top) + var(--toolbar-h) + var(--space-2));
+  background: none;
+  pointer-events: none;
+}
+.sh-busy[data-quiet] .sh-busy-card {
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--border);
+  font-size: 13px;
+}
+.sh-busy[data-quiet] .sh-spinner {
+  width: 16px;
+  height: 16px;
 }
 .sh-busy-card {
   display: flex;

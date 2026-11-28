@@ -14,6 +14,7 @@ import { BottomBar, MoreMenu, ToolOptions, ToolRail } from "./ui/shell/ToolBars"
 import { togglePanel, TopBar } from "./ui/shell/TopBar";
 import { useShell } from "./ui/shell/uiStore";
 import { Viewer } from "./ui/viewer/Viewer";
+import { useViewer } from "./ui/viewer/viewerStore";
 import "./ui/shell/shell.css";
 
 function useTheme() {
@@ -72,8 +73,23 @@ function useUnsavedWarning() {
   }, [unsaved]);
 }
 
+/**
+ * While a document is open only the page itself zooms. A pinch that lands on the bars (or iOS ignoring
+ * touch-action) would otherwise magnify the whole app and leave its controls off screen.
+ */
+function useNoAppZoom(active: boolean) {
+  useEffect(() => {
+    if (!active) return;
+    const stop = (e: Event) => e.preventDefault();
+    document.addEventListener("gesturestart", stop, { passive: false });
+    return () => document.removeEventListener("gesturestart", stop);
+  }, [active]);
+}
+
 function Editor({ desktop }: { desktop: boolean }) {
   const editing = useStore((s) => s.editing !== null);
+  // phones: between two lines the keyboard and its bar stay, so the tool bar must not flash back
+  const switching = useViewer((s) => s.switching);
   const placing = useStore((s) => s.placement !== null);
   // the viewer shows its own bar for a selected item
   const selected = useStore((s) => s.selection !== null);
@@ -90,7 +106,7 @@ function Editor({ desktop }: { desktop: boolean }) {
   }, [fileName]);
 
   return (
-    <div className="sh-app" data-layout={desktop ? "desktop" : "phone"}>
+    <div className="sh-app" data-layout={desktop ? "desktop" : "phone"} data-editing={editing || switching || undefined}>
       <a
         className="sh-skip"
         href="#sh-document"
@@ -114,7 +130,7 @@ function Editor({ desktop }: { desktop: boolean }) {
         </main>
         <Panel desktop={desktop} />
       </div>
-      {!desktop && !editing && <BottomBar />}
+      {!desktop && !editing && !switching && <BottomBar />}
       {menuOpen && <MoreMenu desktop={desktop} />}
     </div>
   );
@@ -130,6 +146,7 @@ export function App() {
   useUnsavedWarning();
   useToolColors();
   useBackGuard(!desktop);
+  useNoAppZoom(hasDoc);
   useEffect(() => registerServiceWorker(), []);
 
   useEffect(() => {

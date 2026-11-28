@@ -7,6 +7,11 @@ import { Button, IconButton, Progress } from "./controls";
 
 /** quick edits must not flash a spinner */
 const DELAY = 350;
+/**
+ * Changes to one thing on a page. Saving them must not cover the screen: the viewer keeps a tap made in the
+ * meantime and answers it when the page is ready, so the next line can be picked at once.
+ */
+const QUIET = new Set(["Updating text", "Adding", "Updating", "Moving image", "Replacing image", "Highlighting", "Deleting"]);
 
 let engineLoaded = false;
 void engineReady.then(() => (engineLoaded = true));
@@ -33,6 +38,7 @@ export function BusyOverlay() {
   const [visible, setVisible] = useState(false);
   const card = useRef<HTMLDivElement>(null);
   const active = busy !== null;
+  const quiet = busy !== null && QUIET.has(busy);
   const slowStart = !!busy && /^(Opening|Preparing|Turning|Adding|Reading)/.test(busy);
   const downloading = useDownloadingEditor(active);
 
@@ -41,12 +47,12 @@ export function BusyOverlay() {
       setVisible(false);
       return;
     }
-    const timer = setTimeout(() => setVisible(true), slowStart ? 60 : DELAY);
+    const timer = setTimeout(() => setVisible(true), slowStart ? 60 : quiet ? DELAY * 2 : DELAY);
     return () => clearTimeout(timer);
-  }, [active, slowStart]);
+  }, [active, slowStart, quiet]);
 
   return (
-    <div className="sh-busy" data-visible={(visible && active) || undefined} role="status" aria-live="polite">
+    <div className="sh-busy" data-visible={(visible && active) || undefined} data-quiet={quiet || undefined} role="status" aria-live="polite">
       {visible && busy && (
         <div ref={card} className="sh-busy-card">
           <span className="sh-spinner" aria-hidden />
@@ -63,7 +69,16 @@ function ToastItem({ toast }: { toast: Toast }) {
   const dismiss = useStore((s) => s.dismissToast);
   const Glyph = ICONS[toast.kind];
   return (
-    <li className={`sh-toast sh-toast-${toast.kind}`} role={toast.kind === "error" ? "alert" : undefined}>
+    <li
+      className={`sh-toast sh-toast-${toast.kind}`}
+      role={toast.kind === "error" ? "alert" : undefined}
+      // a finger on the note puts it away at once, so it is never in the way of the page
+      onPointerUp={(e) => {
+        if (e.pointerType === "mouse" || (e.target as Element).closest("button")) return;
+        // after this tap's click, so that it does not land on what is underneath
+        setTimeout(() => dismiss(toast.id), 80);
+      }}
+    >
       <Glyph size={20} weight="fill" aria-label={toast.kind} />
       <div className="sh-toast-body">
         <p>{toast.message}</p>

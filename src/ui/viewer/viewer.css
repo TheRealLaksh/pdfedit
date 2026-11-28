@@ -37,6 +37,10 @@
 .pv-root:not([data-tool="edit-text"]) .pv-content {
   margin-bottom: 150px;
 }
+/* on phones the options wrap over several rows: the end of the page must still scroll clear of them */
+[data-layout="phone"] .pv-root:not([data-tool="edit-text"]) .pv-content {
+  margin-bottom: 250px;
+}
 
 .pv-content {
   position: relative;
@@ -250,13 +254,22 @@
 .pv-root .pv-inline:focus-visible {
   outline: none;
 }
+.pv-content .pv-inline {
+  -webkit-touch-callout: default;
+}
+.pv-caret-mark {
+  display: inline-block;
+  width: 0;
+  height: 1em;
+  vertical-align: text-bottom;
+}
 .pv-inline::selection {
   background: rgb(47 91 234 / 0.28);
 }
 .pv-inline-block {
-  position: relative;
+  top: 0;
+  left: 0;
   display: block;
-  width: 100%;
   white-space: pre-wrap;
   overflow-wrap: break-word;
   box-sizing: border-box;
@@ -275,23 +288,12 @@
   position: absolute;
 }
 .pv-caret {
-  display: inline-block;
   width: 2px;
-  height: 1em;
-  margin: 0 -1px;
-  vertical-align: text-bottom;
-  animation: pv-blink 1.1s steps(1) infinite;
 }
 .pv-caret-line {
   position: absolute;
   margin: 0 0 0 -1px;
 }
-@keyframes pv-blink {
-  50% {
-    opacity: 0;
-  }
-}
-
 .pv-move-handle {
   position: absolute;
   top: calc(100% + 8px);
@@ -463,7 +465,7 @@
   left: 50%;
   top: -34px;
 }
-.pv-handle-rotate span {
+.pv-handle.pv-handle-rotate span {
   width: 26px;
   height: 26px;
   display: grid;
@@ -692,70 +694,97 @@ label.pv-btn {
   font-family: var(--font);
   box-shadow: 0 -4px 18px rgb(0 0 0 / 0.1);
 }
+.pv-dock-tiny {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.pv-dock-tiny .pv-actions {
+  padding: 2px 0;
+}
+.pv-dock-tiny .pv-actions > .pv-key {
+  flex: none;
+  width: 48px;
+}
 .pv-dock-keyboard {
   padding-bottom: 0;
 }
-.pv-dock .pv-style {
+/* ---------- the phone bar: nothing in it scrolls, so nothing hides ---------- */
+
+.pv-phonebar {
   flex: none;
-  padding: 4px 0 0;
 }
-.pv-field-row {
-  flex: none;
+.pv-actions,
+.pv-row {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+.pv-actions {
+  padding: 4px 0;
+}
+.pv-sheetrow {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+.pv-sheetrow-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-right: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.pv-row-even > *,
+.pv-actions > .pv-key {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.pv-key svg {
+  font-size: 22px;
+}
+.pv-actions > .pv-key.pv-key-done,
+.pv-actions > [data-testid="editor-cancel"],
+.pv-actions-swapped > .pv-key {
+  flex: 0 0 48px;
+}
+.pv-key[aria-expanded="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.pv-key-captioned {
   gap: 6px;
-  padding: 6px 0;
+  font-size: 13px;
 }
-.pv-field {
+.pv-dot {
+  display: block;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--control-border, var(--border));
+}
+.pv-key[aria-pressed="true"] .pv-dot {
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
+}
+.pv-colour .pv-dot-any {
+  background: conic-gradient(#e5484d, #f5a524, #30a46c, #3e63dd, #8e4ec6, #e5484d);
+}
+.pv-select-fill {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  font-size: 16px;
+}
+.pv-swap {
   flex: 1;
   min-width: 0;
+}
+.pv-actions-waiting {
+  justify-content: center;
   min-height: var(--tap);
-  /* exactly three lines */
-  max-height: calc(4.2em + 21px);
-  box-sizing: border-box;
-  margin: 0;
-  padding: 9px 12px;
-  border: 1.5px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface-2);
-  color: var(--text);
-  /* 16px or more: iOS does not zoom the page when it gets focus */
-  font: 17px/1.4 var(--font);
-  resize: none;
-  overflow-y: auto;
-}
-.pv-field:focus,
-.pv-field:focus-visible {
-  outline: none;
-  border-color: var(--accent);
-}
-/* exactly two lines */
-.pv-dock-short .pv-field {
-  max-height: calc(2.8em + 21px);
-}
-.pv-field-swap {
-  flex: 1;
-  min-width: 0;
-}
-.pv-dock .pv-field-swap .pv-style {
-  padding: 0;
-}
-.pv-field-swap .pv-nudge {
-  justify-content: flex-start;
-  border-top: 0;
-}
-/* out of sight but still focused, so the keyboard stays open */
-.pv-dock .pv-field-away {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  width: 1px;
-  height: 1px !important;
-  min-height: 0;
-  padding: 0;
-  border: 0;
-  opacity: 0;
-  pointer-events: none;
+  color: var(--muted);
+  font-size: 14px;
 }
 
 /* the controls scroll sideways: fade the edge that hides more of them */
@@ -884,12 +913,35 @@ label.pv-btn {
   opacity: 0.94;
 }
 
+.pv-fit {
+  position: absolute;
+  z-index: 14;
+  right: max(12px, env(safe-area-inset-right, 0px));
+  bottom: 12px;
+  min-height: var(--tap);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font: 500 14px/1 var(--font);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+}
+.pv-fit svg {
+  font-size: 18px;
+}
+/* the hint and the button share the bottom edge */
+.pv-hint ~ .pv-fit {
+  display: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .pv-spin {
     animation-duration: 2.4s;
-  }
-  .pv-caret {
-    animation: none;
   }
 }
 @media (forced-colors: active) {

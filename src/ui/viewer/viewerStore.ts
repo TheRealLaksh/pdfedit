@@ -39,6 +39,10 @@ interface ViewerState {
   ink: InkBuffer | null;
   /** extra scroll room under the last page so it can move above the keyboard */
   bottomInset: number;
+  /** phones: one line is being saved and the next is about to open; the keyboard and its bar stay */
+  switching: boolean;
+  /** a short instruction after the view moved by itself */
+  hint: string | null;
 }
 
 export const useViewer = create<ViewerState>()(() => ({
@@ -47,7 +51,17 @@ export const useViewer = create<ViewerState>()(() => ({
   draft: null,
   ink: null,
   bottomInset: 0,
+  switching: false,
+  hint: null,
 }));
+
+let hintTimer: ReturnType<typeof setTimeout> | undefined;
+
+export function showHint(hint: string | null) {
+  clearTimeout(hintTimer);
+  useViewer.setState({ hint });
+  if (hint) hintTimer = setTimeout(() => useViewer.setState({ hint: null }), 2800);
+}
 
 let ghostId = 1;
 
@@ -75,7 +89,8 @@ export function settleGhosts(page: number, revision: number) {
 
 export function resetViewer() {
   clearTimeout(inkTimer);
-  useViewer.setState({ ghosts: [], redactions: {}, draft: null, ink: null, bottomInset: 0 });
+  showHint(null);
+  useViewer.setState({ ghosts: [], redactions: {}, draft: null, ink: null, bottomInset: 0, switching: false });
 }
 
 /* ---------- ink: strokes drawn in quick succession become one object ---------- */

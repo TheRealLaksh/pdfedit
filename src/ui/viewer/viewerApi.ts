@@ -9,8 +9,8 @@ export interface ZoomApi {
   /** CSS px per point of the page in the middle of the view (also meaningful while zoom is "fit") */
   getScale(): number;
   zoomBy(factor: number): void;
-  /** zoom and bring a page point near the middle */
-  zoomAround(scale: number, page: number, point: Point): void;
+  /** zoom into a spot the finger touched: the page point stays about where it was on screen */
+  zoomAt(scale: number, page: number, point: Point, clientX: number, clientY: number): void;
 }
 
 let api: ZoomApi | null = null;
@@ -29,7 +29,8 @@ export function zoomBy(factor: number) {
   else useStore.getState().setZoom(getViewerScale() * factor);
 }
 
-export function zoomAround(scale: number, page: number, point: Point) {
-  if (api) api.zoomAround(scale, page, point);
+/** zoom into a spot the finger touched, keeping it about where it was on screen */
+export function zoomAt(scale: number, page: number, point: Point, clientX: number, clientY: number) {
+  if (api) api.zoomAt(scale, page, point, clientX, clientY);
   else useStore.getState().setZoom(scale);
 }

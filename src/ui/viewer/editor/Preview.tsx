@@ -1,8 +1,8 @@
 /**
  * Draws edited text on top of the page, at the exact baseline, angle, size and colour of the original.
- * Used as the live preview, as the desktop inline input, and as the stand-in until the new render arrives.
+ * Used as the inline input (desktop and phone) and as the stand-in until the new render arrives.
  */
-import { useLayoutEffect, type CSSProperties, type ReactNode, type RefObject, type TextareaHTMLAttributes } from "react";
+import { type CSSProperties, type ReactNode, type RefObject, type TextareaHTMLAttributes } from "react";
 import type { Align, Point, Rect, TextStyle } from "../../../engine/types";
 import { rgbToHex, type LineFrame } from "../geometry";
 import { cssFamily, measureText } from "./textMetrics";
@@ -74,30 +74,30 @@ function fontCss(style: TextStyle, scale: number): CSSProperties {
 interface Props {
   spec: PreviewSpec;
   scale: number;
-  /** editable inline field (desktop). Omit for a read-only preview */
+  /** the editable field, laid exactly over the text. Omit for a read-only preview */
   field?: TextareaHTMLAttributes<HTMLTextAreaElement> & { ref: RefObject<HTMLTextAreaElement | null> };
   /** show the original page through (nothing changed yet) */
   ghostText?: boolean;
   /** draw an outline around the text */
   active?: boolean;
-  /** UTF-16 offset: draw a caret marker there (read-only previews) */
+  /** UTF-16 offset of the caret: marked (invisibly) so that the view can follow it */
   caret?: number | null;
+  /** a touch screen: the field is set in 16px or more, so that iOS does not zoom the page, and scaled back */
+  touch?: boolean;
   boxRef?: RefObject<HTMLDivElement | null>;
   children?: ReactNode;
 }
 
-export function Preview({ spec, scale, field, ghostText, active, caret, boxRef, children }: Props) {
-  const blockField = spec.kind === "block" ? field : undefined;
-  useLayoutEffect(() => {
-    const el = blockField?.ref.current;
-    if (!el) return;
-    el.style.height = "0";
-    el.style.height = `${el.scrollHeight}px`;
-  });
+/** the colour of the caret on phones: it must be seen on paper, whatever the text colour */
+const TOUCH_CARET = "#2f5bea";
 
+export function Preview({ spec, scale, field, ghostText, active, caret, touch, boxRef, children }: Props) {
   const [dx, dy] = [spec.offset[0] * scale, spec.offset[1] * scale];
+  const px = spec.style.size * scale;
+  /** how much larger the field is set than it is shown */
+  const k = touch ? Math.max(1, 16.01 / px) : 1;
   const text: CSSProperties = { ...fontCss(spec.style, scale), ...(ghostText ? { color: "transparent" } : null) };
-  const caretColor = rgbToHex(spec.style.color);
+  const caretColor = touch ? TOUCH_CARET : rgbToHex(spec.style.color);
 
   if (spec.kind === "block") {
     const [x0, y0, x1, y1] = spec.rect;
@@ -121,15 +121,26 @@ export function Preview({ spec, scale, field, ghostText, active, caret, boxRef, 
             style={{ left: -dx, top: -dy, width: (x1 - x0) * scale, height: (y1 - y0) * scale, background: spec.cover }}
           />
         )}
-        {field ? (
-          <textarea {...field} className="pv-inline pv-inline-block" style={style} />
-        ) : (
-          <div className="pv-text pv-text-block" dir="auto" style={style}>
-            {spec.text.slice(0, caret ?? spec.text.length)}
-            {caret != null && <span className="pv-caret" data-pv-caret style={{ background: caretColor }} />}
-            {spec.text.slice(caret ?? spec.text.length)}
-            {"​"}
-          </div>
+        {/* with a field this copy is unseen: it gives the box its height and marks where the caret is */}
+        <div className="pv-text pv-text-block" dir="auto" style={field ? { ...style, visibility: "hidden" } : style} aria-hidden={field ? true : undefined}>
+          {spec.text.slice(0, caret ?? spec.text.length)}
+          {caret != null && <span className="pv-caret-mark" data-pv-caret />}
+          {spec.text.slice(caret ?? spec.text.length)}
+          {"\u200b"}
+        </div>
+        {field && (
+          <textarea
+            {...field}
+            className="pv-inline pv-inline-block"
+            style={{
+              ...style,
+              fontSize: px * k,
+              letterSpacing: (spec.style.letterSpacing ?? 0) * scale * k,
+              width: `${100 * k}%`,
+              height: `${100 * k}%`,
+              transform: k === 1 ? undefined : `scale(${1 / k})`,
+            }}
+          />
         )}
         {active && <div className="pv-outline" />}
         {children}
@@ -151,6 +162,8 @@ export function Preview({ spec, scale, field, ghostText, active, caret, boxRef, 
   const vBottom = Math.max(frame.vMax * scale, box.top + box.height);
 
   const bleed = (spec.bleed ?? 0) * (frame.vMax - frame.vMin) * scale;
+  // room for the caret and the next letters; an emptied line stays easy to tap
+  const fieldWidth = Math.max(box.natural + Math.max(4, px * (touch ? 1.2 : 0.5)), touch ? 44 / box.scaleX : 0);
   return (
     <div
       className="pv-line"
@@ -180,12 +193,15 @@ export function Preview({ spec, scale, field, ghostText, active, caret, boxRef, 
           style={{
             ...text,
             caretColor,
-            left: box.left + dx,
+            // right-to-left text ends where the line ends: the spare room is on its left
+            left: (rtl ? box.left + (box.natural - fieldWidth) * box.scaleX : box.left) + dx,
             top: box.top + dy,
-            width: box.natural + Math.max(4, spec.style.size * scale * 0.5),
-            height: box.height,
-            lineHeight: `${box.height}px`,
-            transform: `scaleX(${box.scaleX})`,
+            fontSize: px * k,
+            letterSpacing: (spec.style.letterSpacing ?? 0) * scale * k,
+            width: fieldWidth * k,
+            height: box.height * k,
+            lineHeight: `${box.height * k}px`,
+            transform: `scale(${box.scaleX / k}, ${1 / k})`,
           }}
         />
       ) : (
@@ -214,6 +230,8 @@ export function Preview({ spec, scale, field, ghostText, active, caret, boxRef, 
             left: caretX + dx,
             top: box.top + dy + box.height * 0.08,
             height: box.height * 0.84,
+            // the field draws its own caret
+            visibility: field ? "hidden" : undefined,
             background: "var(--accent)",
           }}
         />

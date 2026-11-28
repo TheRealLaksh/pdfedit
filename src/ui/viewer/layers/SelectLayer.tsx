@@ -322,7 +322,7 @@ function Frame({ page, item, width, height, scale, fresh }: {
         : roomy
           ? ["nw", "n", "ne", "e", "se", "s", "sw", "w"]
           : ["nw", "ne", "se", "sw"];
-  const out = small ? 14 : 0;
+  const out = small ? 10 : 0;
   const place = (percent: number) => `calc(${percent}% + ${Math.sign(percent - 50) * out}px)`;
 
   const handle = (grip: Grip, left: string, top: string, label: string, cursor: string, extra = "") => (

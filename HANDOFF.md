@@ -90,12 +90,13 @@ Device testing: `C:devandroid-sdk`, AVD `pdfedit-phone`, `tests/device/` (see sc
 <!-- handoff:auto:start -->
 ## Auto: repo state
 
-_Refreshed 28 Nov 2026, 8:43 am IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
+_Refreshed 28 Nov 2026, 9:00 am IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
 
 Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `9f13af1` 2026-11-28 08:43 fix(text): every box groups, edits and re-edits cleanly; sweep over realistic documents
 - `ae902cd` 2026-11-28 06:56 docs: handoff for the phone fixes and next work
 - `051b4a0` 2026-11-28 06:53 test(device): drive the app with real touches on an Android phone
 - `ecff063` 2026-11-28 06:39 docs: keep owner-restricted PDFs editable with a warning
@@ -110,60 +111,36 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `4dd84e0` 2026-11-27 23:28 test: desktop and back-navigation browser tests
 - `41fa302` 2026-11-27 23:28 fix(shell): desktop and back-navigation fixes, restriction and XFA notices
 - `352af7f` 2026-11-27 23:28 fix(ocr): better mixed-language detection and pinned recognition data
-- `31c2352` 2026-11-27 23:28 fix(ops): guard hostile documents and keep list box highlights
 
 ### Uncommitted changes at refresh time
 
 ```
-M  HANDOFF.md
- M src/App.tsx
-M  src/engine/fonts/catalog.ts
-M  src/engine/fonts/resolve.ts
-M  src/engine/ocr/fit.ts
-M  src/engine/ocr/recognised.ts
-M  src/engine/text/analyze.ts
-M  src/engine/text/edit.ts
-M  src/engine/text/layout.ts
-M  src/engine/text/pdffont.ts
-A  src/engine/text/starts.ts
-M  src/engine/text/unicode.ts
- M src/ui/shell/Feedback.tsx
- M src/ui/shell/hooks.ts
- M src/ui/shell/shell.css
- M src/ui/viewer/Overlays.tsx
- M src/ui/viewer/Viewer.tsx
- M src/ui/viewer/editor/Dock.tsx
- M src/ui/viewer/editor/Preview.tsx
- M src/ui/viewer/editor/StyleBar.tsx
- M src/ui/viewer/editor/TextEditor.tsx
- M src/ui/viewer/editor/controller.ts
- M src/ui/viewer/geometry.ts
- M src/ui/viewer/layers/EditTextLayer.tsx
- M src/ui/viewer/layers/PlaceLayer.tsx
- M src/ui/viewer/layers/SelectLayer.tsx
- M src/ui/viewer/useViewport.ts
- M src/ui/viewer/viewer.css
- M src/ui/viewer/viewerApi.ts
- M src/ui/viewer/viewerStore.ts
+M  src/App.tsx
+M  src/ui/shell/Feedback.tsx
+M  src/ui/shell/hooks.ts
+M  src/ui/shell/shell.css
+M  src/ui/viewer/Overlays.tsx
+M  src/ui/viewer/Viewer.tsx
+M  src/ui/viewer/editor/Dock.tsx
+A  src/ui/viewer/editor/PhoneBar.tsx
+M  src/ui/viewer/editor/Preview.tsx
+M  src/ui/viewer/editor/StyleBar.tsx
+M  src/ui/viewer/editor/TextEditor.tsx
+M  src/ui/viewer/editor/controller.ts
+M  src/ui/viewer/geometry.ts
+M  src/ui/viewer/layers/EditTextLayer.tsx
+M  src/ui/viewer/layers/PlaceLayer.tsx
+M  src/ui/viewer/layers/SelectLayer.tsx
+M  src/ui/viewer/useViewport.ts
+M  src/ui/viewer/viewer.css
+M  src/ui/viewer/viewerApi.ts
+M  src/ui/viewer/viewerStore.ts
  M tests/device/android.mjs
  M tests/device/sweep.mjs
  M tests/e2e/edit.spec.ts
  M tests/e2e/helpers.ts
  M tests/e2e/ocr.spec.ts
  M tests/e2e/ui.spec.ts
-A  tests/ocr/boxes.test.ts
-A  tests/text/boxes.test.ts
-A  tests/text/sweep/corpus.mjs
-A  tests/text/sweep/dump.test.ts
-A  tests/text/sweep/gen-html.mjs
-A  tests/text/sweep/gen-py.py
-A  tests/text/sweep/gen-scan.py
-A  tests/text/sweep/gen_design.py
-A  tests/text/sweep/run.mjs
-A  tests/text/sweep/show.py
-A  tests/text/sweep/sweep.test.ts
-A  tests/text/sweep/sweep.ts
-?? src/ui/viewer/editor/PhoneBar.tsx
 ?? tests/device/phone.mjs
 ?? tests/e2e/phone.spec.ts
 ```

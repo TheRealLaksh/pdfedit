@@ -189,6 +189,45 @@ export function nearestLine(lines: TextLine[], p: Point, scale: number, touch: b
   return best;
 }
 
+/**
+ * Is a finger tap at `p` too coarse to say which line is meant? True when the text is tiny on screen and a
+ * second line is about as close to the finger: the view then magnifies the spot instead of guessing.
+ */
+export function ambiguousTap(lines: TextLine[], p: Point, scale: number): boolean {
+  const reach = 14;
+  const near: { distance: number; height: number }[] = [];
+  for (const line of lines) {
+    const f = lineFrame(line);
+    const [u, v] = toLocal(f, p);
+    const dx = Math.max(0, f.uMin - u, u - f.uMax) * scale;
+    const dy = Math.max(0, f.vMin - v, v - f.vMax) * scale;
+    if (dx <= reach && dy <= reach) near.push({ distance: Math.hypot(dx, dy), height: (f.vMax - f.vMin) * scale });
+  }
+  if (near.length < 2) return false;
+  near.sort((a, b) => a.distance - b.distance);
+  return near[0]!.height < 13 && near[1]!.distance - near[0]!.distance < 12;
+}
+
+/**
+ * While a line is open: does a tap at `p` still mean that line (to put the caret in it), although it landed
+ * beside it? Only when no other line is actually under the finger.
+ */
+export function meansOpenLine(lines: TextLine[], open: TextLine, p: Point, scale: number): boolean {
+  const gap = (line: TextLine) => {
+    const f = lineFrame(line);
+    const [u, v] = toLocal(f, p);
+    return [Math.max(0, f.uMin - u, u - f.uMax) * scale, Math.max(0, f.vMin - v, v - f.vMax) * scale] as const;
+  };
+  const [dx, dy] = gap(open);
+  if (dx > 32 || dy > 14) return false;
+  if (dx === 0 && dy === 0) return true;
+  return !lines.some((line) => {
+    if (line.id === open.id) return false;
+    const [x, y] = gap(line);
+    return x <= Math.min(dx, 4) && y <= Math.min(dy, 3);
+  });
+}
+
 /* ---------- rects and added objects ---------- */
 
 export function normRect(a: Point, b: Point): Rect {

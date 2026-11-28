@@ -6,12 +6,14 @@
 import { useLayoutEffect, useRef, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 
-export function Dock({ children, dockRef, onMoved, short }: {
+export function Dock({ children, dockRef, onMoved, short, tiny }: {
   children: ReactNode;
   dockRef: RefObject<HTMLDivElement | null>;
   /** the dock moved or changed height */
   onMoved(): void;
   short: boolean;
+  /** a small corner card instead of a full width bar */
+  tiny?: boolean;
 }) {
   const moved = useRef(onMoved);
   moved.current = onMoved;
@@ -30,9 +32,10 @@ export function Dock({ children, dockRef, onMoved, short }: {
       const left = vv?.offsetLeft ?? 0;
       const width = vv?.width ?? window.innerWidth;
       const top = Math.max(viewTop, viewTop + viewHeight - height);
-      el.style.width = `${width}px`;
+      const corner = el.classList.contains("pv-dock-tiny");
+      el.style.width = corner ? "auto" : `${width}px`;
       el.style.maxHeight = `${viewHeight}px`;
-      el.style.transform = `translate3d(${left}px, ${top}px, 0)`;
+      el.style.transform = `translate3d(${corner ? left + width - el.offsetWidth - 4 : left}px, ${top}px, 0)`;
       el.classList.toggle("pv-dock-keyboard", window.innerHeight - viewHeight > 100);
       const now = `${left}:${top}:${width}:${height}`;
       if (now !== last) {
@@ -73,10 +76,10 @@ export function Dock({ children, dockRef, onMoved, short }: {
       document.removeEventListener("focusin", follow);
       document.removeEventListener("focusout", follow);
     };
-  }, [dockRef]);
+  }, [dockRef, tiny]);
 
   return createPortal(
-    <div ref={dockRef} className={short ? "pv-dock pv-dock-short" : "pv-dock"} data-pv-ui="" data-testid="editor-dock">
+    <div ref={dockRef} className={`pv-dock${short ? " pv-dock-short" : ""}${tiny ? " pv-dock-tiny" : ""}`} data-pv-ui="" data-testid="editor-dock">
       {children}
     </div>,
     document.body,
