@@ -155,8 +155,8 @@ test("a box drawn by hand is read and can be retyped; corners move by keyboard",
   const at = (x: number, y: number) => [box.x + (x / WIDTH) * box.width, box.y + (y / HEIGHT) * box.height] as const;
   await page.mouse.move(...at(50, 318));
   await page.mouse.down();
-  await page.mouse.move(...at(250, 350), { steps: 4 });
-  await page.mouse.move(...at(440, 372), { steps: 4 });
+  await page.mouse.move(...at(300, 350), { steps: 4 });
+  await page.mouse.move(...at(560, 372), { steps: 4 });
   await page.mouse.up();
   await expect(page.locator(".im-box")).toHaveCount(3);
   await expect(textField(page)).toHaveValue(/Readings every Friday/, { timeout: 60_000 });

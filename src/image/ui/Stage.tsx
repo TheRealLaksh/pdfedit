@@ -90,6 +90,12 @@ export function Stage(props: StageProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, size.w, size.h]);
 
+  // drawing a new area starts from the whole picture: a drag cannot reach what is off screen
+  useEffect(() => {
+    if (mode === "draw") fit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
+
   // the picture and the changes on top of it
   const painted = useRef<Patch[]>([]);
   const first = useRef<ImageBitmap | null>(null);

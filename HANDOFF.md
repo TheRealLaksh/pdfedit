@@ -92,12 +92,13 @@ Device testing: `C:devandroid-sdk`, AVD `pdfedit-phone`, `tests/device/` (see sc
 <!-- handoff:auto:start -->
 ## Auto: repo state
 
-_Refreshed 28 Nov 2026, 5:10 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
+_Refreshed 28 Nov 2026, 5:28 pm IST by `scripts/handoff.mjs` (runs on every commit). Don't edit inside this block._
 
 Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 
 ### Last 15 commits
 
+- `f752bd8` 2026-11-28 17:10 feat(shell): finish sheet, drafts, sample, thumbnails, new design, install and search pages
 - `7487e0e` 2026-11-28 17:10 feat(viewer): real font preview and picker, overflow fit, form filling, fill marks, menus and keyboard use
 - `aa564f2` 2026-11-28 16:41 feat(image): edit the text inside pictures with matched fonts and rebuilt backgrounds
 - `4135e0c` 2026-11-28 16:03 feat(engine): real preview fonts, size-limited export, drafts, private image metadata stripped
@@ -112,62 +113,11 @@ Branch: `main` · remote: https://github.com/TheRealLaksh/pdfedit.git
 - `1982251` 2026-11-28 00:21 docs: record summary email and secret-scan result
 - `dc0044b` 2026-11-28 00:13 docs: mark the live link
 - `622a699` 2026-11-28 00:13 docs: handoff for the live release
-- `1969f44` 2026-11-28 00:02 fix(deploy): stop Cloudflare injecting scripts into the page without losing compression
 
 ### Uncommitted changes at refresh time
 
 ```
-M  index.html
-A  public/404.html
-A  public/fonts/OFL.txt
-A  public/fonts/caslon-400.ttf
-M  public/manifest.webmanifest
-A  public/og.png
-M  public/robots.txt
-A  public/sample.pdf
-A  public/screenshots/desktop.png
-A  public/screenshots/phone.png
-A  public/sitemap.xml
-M  public/sw.js
-M  public/theme.js
-A  scripts/make-previews.mjs
-A  scripts/make-sample.mjs
-M  src/App.tsx
-M  src/main.tsx
-M  src/store/index.ts
-M  src/ui/shell/Dialogs.tsx
-A  src/ui/shell/Drafts.tsx
-M  src/ui/shell/Feedback.tsx
-A  src/ui/shell/FinishSheet.tsx
-A  src/ui/shell/Install.tsx
-M  src/ui/shell/Panel.tsx
-A  src/ui/shell/Shortcuts.tsx
-A  src/ui/shell/Sidebar.tsx
-M  src/ui/shell/StartScreen.tsx
-M  src/ui/shell/ToolBars.tsx
-M  src/ui/shell/TopBar.tsx
-M  src/ui/shell/actions.ts
-M  src/ui/shell/backGuard.ts
-A  src/ui/shell/boot.ts
-A  src/ui/shell/errors.ts
-M  src/ui/shell/hooks.ts
-A  src/ui/shell/incoming.ts
-M  src/ui/shell/panels/AboutPanel.tsx
-M  src/ui/shell/panels/ExportPanel.tsx
-M  src/ui/shell/panels/FindPanel.tsx
-M  src/ui/shell/panels/OcrPanel.tsx
-M  src/ui/shell/panels/PagesPanel.tsx
-M  src/ui/shell/pwa.ts
-M  src/ui/shell/shell.css
-A  src/ui/shell/strings.ts
-A  src/ui/shell/swipe.ts
-M  src/ui/shell/tools.ts
-M  src/ui/shell/uiStore.ts
-M  src/ui/shell/util.ts
-M  src/ui/tokens.css
-M  tests/e2e/document.spec.ts
-M  tests/e2e/helpers.ts
-A  tests/e2e/shell.spec.ts
-M  tests/e2e/ui.spec.ts
+M  src/image/ui/Stage.tsx
+M  tests/e2e/image.spec.ts
 ```
 <!-- handoff:auto:end -->
